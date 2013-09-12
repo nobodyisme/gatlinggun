@@ -1,0 +1,13 @@
+Source: gatlinggun
+Section: net
+Priority: extra
+Maintainer: Andrey Vasilenkov <aindigo@yandex-team.ru>
+Build-Depends: debhelper (>= 8.0.0)
+Standards-Version: 3.9.2
+Homepage: https://github.com/nobodyisme/gatlinggun
+Vcs-Git: git://github.com/nobodyisme/gatlinggun.git
+
+Package: elliptics-gatlinggun
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, python-opster, python-kazoo
+Description: Keys dispatcher for elliptics storage
