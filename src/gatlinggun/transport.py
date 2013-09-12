@@ -9,7 +9,7 @@ from queue import FilteredLockingQueue
 logger = logging.getLogger('gatlinggun')
 
 
-class ZK(object):
+class ZkTransport(object):
 
     def __init__(self, host, group, timeout=10, interval=2):
         self.group = group
@@ -41,3 +41,6 @@ class ZK(object):
             # maybe pass exception for invalid records in queue
             # can we try to unlock the task?
             raise
+
+    def put(self, data):
+        self.q.put(data)
