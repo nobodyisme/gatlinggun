@@ -15,7 +15,6 @@ class ZkTransport(object):
     def __init__(self, host, group, timeout=10, interval=2):
         self.group = group
         self.client = KazooClient(host)
-        # what for is the 'start'?
         self.client.start()
         self.q = FilteredLockingQueue(self.client, '/cache', self.__filter)
         self.timeout = timeout
