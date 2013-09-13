@@ -101,10 +101,7 @@ def run(group, enode, zhost):
             with transport.item() as item:
                 if not item:
                     raise ValueError('No item fetched')
-                try:
-                    task = json.loads(item)
-                except (TypeError, ValueError):
-                    raise InvalidDataError
+                task = json.loads(item)
 
                 logger.info('Task %s fetched: %s' % (task['key'], task))
                 gun.fire(task['key'].encode('utf-8'), from_=task['sgroups'], to_=task['dgroups'])

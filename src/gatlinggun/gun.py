@@ -16,7 +16,7 @@ class Gun(object):
 
     def fire(self, key, from_=None, to_=None):
         if not from_ or not to_:
-            raise ValueError('Failed to process key %s' % key)
+            raise InvalidDataError('Groups are not properly defined for key "%s"' % key)
         logger.info('Processing key %s for groups %s' % (key, to_))
 
         # fetch data from source nodes
