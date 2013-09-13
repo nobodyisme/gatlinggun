@@ -2,6 +2,8 @@ import logging
 
 import elliptics
 
+from errors import ConnectionError, InvalidDataError
+
 
 logger = logging.getLogger('gatlinggun')
 
@@ -20,12 +22,18 @@ class Gun(object):
         # fetch data from source nodes
         logger.info('Fetching data from groups %s' % from_)
         self.session.add_groups(from_)
-        data = self.session.read_data(key)
+        try:
+            data = self.session.read_data(key)
+        except Exception:
+            raise ConnectionError('Failed to read data for key %s, will be retried' % key)
 
         logger.info('Data read, len: %s' % len(data))
 
         # distribute data to destination nodes
         logger.info('Distributing fetched data to groups %s' % to_)
         self.session.add_groups(to_)
-        res = self.session.write_data(key, data)
+        try:
+            res = self.session.write_data(key, data)
+        except Exception:
+            raise ConnectionError('Failed to write data for key %s, will be retried' % key)
         logger.info('Data was distibuted')

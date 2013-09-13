@@ -5,6 +5,7 @@ import logging
 from kazoo.client import KazooClient
 from queue import FilteredLockingQueue
 
+from errors import ConnectionError, InvalidDataError
 
 logger = logging.getLogger('gatlinggun')
 
@@ -35,10 +36,15 @@ class ZkTransport(object):
         try:
             task = self.q.get(self.timeout)
             yield task
-            print "Consuming task"
             self.q.consume()
+        except ConnectionError:
+            # in case of connection error we should retry the task execution
+            raise
+        except InvalidDataError:
+            # in case of invalid data we can safely consume the item
+            self.q.consume()
+            raise
         except Exception as e:
-            # maybe pass exception for invalid records in queue
             # can we try to unlock the task?
             raise
 
