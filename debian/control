@@ -1,7 +1,7 @@
-Source: gatlinggun
+Source: elliptics-gatlinggun
 Section: net
 Priority: extra
-Maintainer: Andrey Vasilenkov <aindigo@yandex-team.ru>
+Maintainer: Andrey Vasilenkov <indigo@yandex-team.ru>
 Build-Depends: debhelper (>= 8.0.0)
 Standards-Version: 3.9.2
 Homepage: https://github.com/nobodyisme/gatlinggun

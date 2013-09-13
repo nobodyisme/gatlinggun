@@ -5,6 +5,6 @@
 include /usr/share/cdbs/1/rules/debhelper.mk
 
 pre-build::
-    mkdir -p $(CURDIR)/debian/tmp/usr/lib/gatlinggun/
-    mkdir -p $(CURDIR)/debian/tmp/usr/bin/
-    cp $(CURDIR)/usr/bin/elliptics-gatlinggun $(CURDIR)/debian/tmp/usr/bin/
+	mkdir -p $(CURDIR)/debian/tmp/usr/lib/gatlinggun/
+	mkdir -p $(CURDIR)/debian/tmp/usr/bin/
+	cp $(CURDIR)/usr/bin/elliptics-gatlinggun $(CURDIR)/debian/tmp/usr/bin/
