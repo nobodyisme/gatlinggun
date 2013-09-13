@@ -33,7 +33,7 @@ def setup_logger():
     # my_logger.addHandler(handler)
     handler = RotatingFileHandler('/var/log/gatlinggun/daemon.log')
 
-    formatter = logging.Formatter('%(asctime)s %(processName)s [%(levelname)s] %(message)s')
+    formatter = logging.Formatter('%(asctime)s %(processName)s-%(process)s [%(levelname)s] %(message)s')
     handler.setFormatter(formatter)
 
     logger_.addHandler(handler)
