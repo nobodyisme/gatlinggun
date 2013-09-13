@@ -7,3 +7,8 @@ class ConnectionError(Exception):
 class InvalidDataError(Exception):
     """Invalid data error"""
     pass
+
+
+class EmptyQueue(Exception):
+    """Empty queue, not actually an error"""
+    pass

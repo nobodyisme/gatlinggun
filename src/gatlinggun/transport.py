@@ -45,6 +45,7 @@ class ZkTransport(object):
             raise
         except Exception as e:
             # can we try to unlock the task?
+            self.q.unlock()
             raise
 
     def put(self, data):

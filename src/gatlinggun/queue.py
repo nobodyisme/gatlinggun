@@ -127,6 +127,25 @@ class FilteredLockingQueue(BaseQueue):
         else:
             return False
 
+    def unlock(self):
+        """Unlocks a currently processing entry.
+
+        :returns: True if element was unlocked successfully, False otherwise.
+        :rtype: bool
+        """
+        if not self.processing_element is None and self.holds_lock():
+            id_, value = self.processing_element
+
+            self.client.retry(self.client.delete,
+                "{path}/{id}".format(
+                    path=self._lock_path,
+                    id=id_))
+
+            self.processing_element = None
+            return True
+        else:
+            return False
+
     def _inner_get(self, timeout):
         flag = self.client.handler.event_object()
         lock = self.client.handler.lock_object()
