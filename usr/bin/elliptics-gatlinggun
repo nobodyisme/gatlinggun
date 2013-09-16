@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import copy
 import json
 import logging
 from logging.handlers import SysLogHandler, RotatingFileHandler
@@ -9,6 +10,7 @@ import time
 import elliptics
 from opster import command
 
+from gatlinggun import config
 from gatlinggun import daemon
 from gatlinggun.errors import ConnectionError, InvalidDataError, EmptyQueue
 from gatlinggun.gun import Gun
@@ -24,25 +26,41 @@ DEFAULT_LOGGING_MASK = 31
 DEFAULT_PIDFILE = '/var/run/elliptics-gatlinggun/gatlinggun'
 
 
-def setup_logger():
-    logger_ = logging.getLogger('gatlinggun')
-    logger_.setLevel(logging.DEBUG)
+def import_object(object_name):
+    module_path = object_name.split('.')
+    import_path = module_path[0]
+    module = __import__(import_path)
 
-    # handler = SysLogHandler(address='/dev/log')
+    obj_ = module
+    for part in module_path[1:]:
+        obj_ = getattr(obj_, part)
+    return obj_
 
-    # my_logger.addHandler(handler)
-    handler = RotatingFileHandler('/var/log/gatlinggun/daemon.log')
 
-    formatter = logging.Formatter('%(asctime)s %(processName)s-%(process)s [%(levelname)s] %(message)s')
-    handler.setFormatter(formatter)
+def setup_logger(log_config):
 
-    logger_.addHandler(handler)
+    formatters = {}
+    for formatter, settings in log_config['formatters'].iteritems():
+        class_ = import_object(settings['class'])
+        formatters[formatter] = class_()
 
-    logger_.debug('this is debug')
-    logger_.critical('this is critical')
-    return logger_
+    handlers = {}
+    for handler, settings in log_config['handlers'].iteritems():
+        settings_ = copy.copy(settings)
+        class_ = import_object(settings_.pop('class'))
+        level_ = getattr(logging, settings_.pop('level', 'NOTSET'))
+        formatter_ = settings_.pop('formatter', 'default')
+        handler_obj = class_(**settings_)
+        handler_obj.setLevel(level_)
+        handler_obj.setFormatter(formatters[formatter_])
+        handlers[handler] = handler_obj
 
-logger = setup_logger()
+    for logger, settings in log_config['loggers'].iteritems():
+        logger = logging.getLogger(logger)
+        logger.setLevel(getattr(logging, settings.get('level', 'NOTSET')))
+        for handler in settings['handler']:
+            logger.addHandler(handlers[handler])
+
 
 def parse_address(s, default_port=None):
     parts = s.split(':', 1)
@@ -53,34 +71,40 @@ def parse_address(s, default_port=None):
     return host, port
 
 
-@command(usage='-g GROUP -e ELLIPTICS-NODE -z ZOOKEEPER-HOST '
+@command(usage='-g GROUP -e ELLIPTICS-NODE -z ZOOKEEPER-HOST -c CONFIG '
                '[--daemonize] [--pidfile PIDFILE] [--user USER]')
 def main(group=('g', '', 'Group id of node where daemon is being run'),
          enode=('e', '', 'Elliptics node which daemon will use for cache distribution'),
          zhost=('z', '%s:%s' % (DEFAULT_ZOOKEEPER_HOST, DEFAULT_ZOOKEEPER_PORT),
                 'Zookeper queue for cache tasks fetching'),
+         config=('c', '', 'Application config file'),
          daemonize=('', False, 'Daemonize this process'),
          pidfile=('', None, 'Use this pidfile'),
          user=('', None, '')):
     """This script starts gatling gun daemon that
     distributes keys to designated cache nodes"""
 
-    if not elliptics or not zhost or not group:
+    if not elliptics or not zhost or not group or not config:
         main.help()
         sys.exit(1)
 
     if daemonize:
         d = daemon.Daemon(pidfile or DEFAULT_PIDFILE, user)
         d.run = run
-        d.start(group, enode, zhost)
+        d.start(group, enode, zhost, config)
     else:
-        run(group, enode, zhost)
+        run(group, enode, zhost, config)
 
 
-def run(group, enode, zhost):
+def run(group, enode, zhost, config_fname):
     parts = enode.split(':', 1)
     ehost, eport = parse_address(enode)
     group = int(group)
+
+    config_ = config.JsonConfig(config_fname)
+    setup_logger(config_['logging'])
+
+    logger = logging.getLogger()
     logger.info('Group %d' % group)
 
     logger.info('Connection to elliptics node %s:%s' % (ehost, eport))
