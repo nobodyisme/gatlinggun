@@ -10,5 +10,5 @@ class InvalidDataError(Exception):
 
 
 class EmptyQueue(Exception):
-    """Empty queue, not actually an error"""
+    """Empty queue event, not actually an error"""
     pass
