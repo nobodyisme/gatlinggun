@@ -2,9 +2,9 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
-include /usr/share/cdbs/1/rules/debhelper.mk
+DEB_PYTHON_SYSTEM=pycentral
+DEB_PYTHON_DISTUTILS_INSTALLDIR_SKEL=/usr/lib/@PYTHONBINARY@/dist-packages/
+DEB_PYTHON_INSTALL_ARGS_ALL=--prefix=/usr --no-compile -O0 --install-layout=deb
 
-pre-build::
-	mkdir -p $(CURDIR)/debian/tmp/usr/lib/gatlinggun/
-	mkdir -p $(CURDIR)/debian/tmp/usr/bin/
-	cp $(CURDIR)/usr/bin/elliptics-gatlinggun $(CURDIR)/debian/tmp/usr/bin/
+include /usr/share/cdbs/1/rules/debhelper.mk
+include /usr/share/cdbs/1/class/python-distutils.mk
