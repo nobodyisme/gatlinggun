@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import os.path
 import shutil
@@ -14,6 +15,11 @@ logger = logging.getLogger('gatlinggun')
 
 class Gun(object):
 
+    CHUNK_SIZE = 1024 * 1024  # 1 Mb
+
+    WRITE_RETRY_NUM = 5
+    READ_RETRY_NUM = 3
+
     def __init__(self, node):
         self.session = elliptics.Session(node)
         self.tmpdir = tempfile.mkdtemp(prefix='gatlinggun')
@@ -28,7 +34,7 @@ class Gun(object):
         logger.info('Fetching data from groups %s' % from_)
         self.session.add_groups(from_)
         try:
-            self.session.read_file(key, fname)
+            size = self.read(key, fname)
         except Exception:
             raise ConnectionError('Failed to read data for key %s, will be retried' % key)
 
@@ -38,7 +44,7 @@ class Gun(object):
         logger.info('Distributing fetched data to groups %s' % to_)
         self.session.add_groups(to_)
         try:
-            res = self.session.write_file(key, fname)
+            self.write(key, fname, size)
         except Exception:
             raise ConnectionError('Failed to write data for key %s, will be retried' % key)
         finally:
@@ -48,6 +54,41 @@ class Gun(object):
                 pass
 
         logger.info('Data was distibuted')
+
+    def read(self, key, fname):
+        eid = elliptics.Id(key)
+        size = self.session.lookup(eid)[2]
+
+        with open(fname, 'wb') as f:
+            for i in xrange(int(math.ceil(float(size) / self.CHUNK_SIZE))):
+                for retries in xrange(self.READ_RETRY_NUM):
+                    try:
+                        chunk = self.session.read_data(eid, i * self.CHUNK_SIZE, self.CHUNK_SIZE)
+                        break
+                    except Exception as e:
+                        logging.info('Error while reading key %s: type %s, msg: %s' % (key, type(e), e))
+                else:
+                    raise ConnectionError('Failed to read key %s: offset %s / total %s' % (key, i * self.CHUNK_SIZE))
+                f.write(chunk)
+
+        return size
+
+    def write(self, key, fname, size):
+        eid = elliptics.Id(key)
+
+        with open(fname, 'rb') as f:
+            for i in xrange(int(math.ceil(float(size) / self.CHUNK_SIZE))):
+                data = f.read(self.CHUNK_SIZE)
+                for retries in xrange(self.WRITE_RETRY_NUM):
+                    try:
+                        logging.debug('Writing key %s: len %s, offset %s' % (key, len(data), i * self.CHUNK_SIZE))
+                        self.session.write_data(eid, data, i * self.CHUNK_SIZE)
+                        break
+                    except Exception as e:
+                        logging.info('Error while writing key %s: type %s, msg: %s' % (key, type(e), e))
+                        pass
+                else:
+                    raise ConnectionError('Failed to write key %s: offset %s / total %s' % (key, i * self.CHUNK_SIZE, size))
 
     def __del__(self):
         shutil.rmtree(self.tmpdir)
