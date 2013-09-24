@@ -14,9 +14,8 @@ logger = logging.getLogger('gatlinggun')
 
 class Gun(object):
 
-    def __init__(self, node, group):
+    def __init__(self, node):
         self.session = elliptics.Session(node)
-        self.group = group
         self.tmpdir = tempfile.mkdtemp(prefix='gatlinggun')
 
     def fire(self, key, from_=None, to_=None):

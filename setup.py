@@ -10,6 +10,4 @@ setup(
     package_dir={'gatlinggun': 'src/gatlinggun'},
     license="LGPLv3+",
     scripts=['usr/bin/elliptics-gatlinggun']
-    # data_files=[('/etc/cocaine/', ['init/cocaine-tornado-proxy.conf']),
-    #             ('/etc/init.d/',['init/cocaine-tornado-proxy'])]
 )
