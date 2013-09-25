@@ -23,7 +23,6 @@ class ZkTransport(object):
     def __filter(self, data):
         try:
             d = json.loads(data)
-            print 'Parsed task data: %s' % (str(d))
             if self.group in d['dgroups']:
                 return True
         except:
