@@ -12,7 +12,7 @@ logger = logging.getLogger('gatlinggun')
 
 class ZkTransport(object):
 
-    def __init__(self, host, group, timeout=10, interval=2):
+    def __init__(self, host='127.0.0.1:2181', group=0, timeout=10, interval=2):
         self.group = group
         self.client = KazooClient(host)
         self.client.start()

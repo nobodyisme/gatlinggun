@@ -20,14 +20,30 @@ class Gun(object):
     WRITE_RETRY_NUM = 5
     READ_RETRY_NUM = 3
 
+    DISTRUBUTE_TASK_ACTION = 'add'
+    ELIMINATE_TASK_ACTION = 'remove'
+
     def __init__(self, node):
         self.session = elliptics.Session(node)
         self.tmpdir = tempfile.mkdtemp(prefix='gatlinggun')
 
-    def fire(self, key, from_=None, to_=None):
+    def process(self, task):
+        if not 'action' in task:
+            raise InvalidDataError('No action is set for task')
+        if task['action'] == self.DISTRUBUTE_TASK_ACTION:
+            return self.distribute(task['key'].encode('utf-8'),
+                                   from_=task['sgroups'],
+                                   to_=task['dgroups'])
+        elif task['action'] == self.ELIMINATE_TASK_ACTION:
+            return self.eliminate(task['key'].encode('utf-8'),
+                                  from_=task['dgroups'])
+
+        raise InvalidDataError('Unknow action: %s' % task['action'])
+
+    def distribute(self, key, from_=None, to_=None):
         if not from_ or not to_:
             raise InvalidDataError('Groups are not properly defined for key "%s"' % key)
-        logger.info('Processing key %s for groups %s' % (key, to_))
+        logger.info('Distributing key %s for groups %s' % (key, to_))
 
         fname = os.path.join(self.tmpdir, key)
         # fetch data from source nodes
@@ -54,6 +70,15 @@ class Gun(object):
                 pass
 
         logger.info('Data was distibuted')
+
+    def eliminate(self, key, from_=None):
+        if not from_:
+            raise InvalidDataError('Groups are not properly defined for key "%s"' % key)
+
+        logging.info('Removing key %s from groups %s' % (key, from_))
+
+        self.session.add_groups(from_)
+        self.remove(key)
 
     def read(self, key, fname):
         eid = elliptics.Id(key)
@@ -89,6 +114,17 @@ class Gun(object):
                         pass
                 else:
                     raise ConnectionError('Failed to write key %s: offset %s / total %s' % (key, i * self.CHUNK_SIZE, size))
+
+    def remove(self, key):
+        eid = elliptics.Id(key)
+
+        try:
+            self.session.remove(eid)
+        except elliptics.NotFoundError:
+            # keys are already removed from destination groups
+            pass
+        except Exception as e:
+            raise ConnectionError('Failed to remove key %s: %s' % e)
 
     def __del__(self):
         shutil.rmtree(self.tmpdir)

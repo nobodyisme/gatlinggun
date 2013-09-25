@@ -111,9 +111,9 @@ def run(group, enode, zhost, config_fname):
     node = elliptics.Node(elliptics.Logger(DEFAULT_LOGGING_PATH, DEFAULT_LOGGING_MASK))
     node.add_remote(ehost, eport)
 
-    gun = Gun(node, group)
+    gun = Gun(node)
     logger.info('Connection to transport node %s' % zhost)
-    transport = Transport(zhost, group, timeout=3)
+    transport = Transport(host=zhost, group=group, timeout=3)
 
     logger.info('Starting task processing')
 
@@ -127,7 +127,7 @@ def run(group, enode, zhost, config_fname):
                 task = json.loads(item)
 
                 logger.info('Task %s fetched: %s' % (task['key'], task))
-                gun.fire(task['key'].encode('utf-8'), from_=task['sgroups'], to_=task['dgroups'])
+                gun.process(task)
                 logger.info('Task %s processed' % (task['key'],))
 
         except (ConnectionError, InvalidDataError) as e:
