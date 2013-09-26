@@ -1,25 +1,22 @@
 #!/usr/bin/env python
+from ConfigParser import ConfigParser
 import copy
 import json
 import logging
-from logging.handlers import SysLogHandler, RotatingFileHandler
-import opster
 import sys
 import time
 
 import elliptics
 from opster import command
 
-from gatlinggun import config
+from gatlinggun.config import JsonConfig
 from gatlinggun import daemon
 from gatlinggun.errors import ConnectionError, InvalidDataError, EmptyQueue
 from gatlinggun.gun import Gun
 from gatlinggun.transport import ZkTransport as Transport
 
 
-DEFAULT_ZOOKEEPER_HOST = '127.0.0.1'
-DEFAULT_ZOOKEEPER_PORT = '2181'
-
+DEFAULT_CONFIG_PATH = '/etc/elliptics/gatlinggun/gatlinggun.conf'
 DEFAULT_LOGGING_CONFIG_PATH = '/etc/elliptics/gatlinggun/logging.conf'
 
 DEFAULT_LOGGING_PATH = '/var/log/gatlinggun/elliptics.log'
@@ -77,8 +74,8 @@ def parse_address(s, default_port=None):
                '[--daemonize] [--pidfile PIDFILE] [--user USER]')
 def main(group=('g', '', 'Group id of node where daemon is being run'),
          enode=('e', '', 'Elliptics node which daemon will use for cache distribution'),
-         zhost=('z', '%s:%s' % (DEFAULT_ZOOKEEPER_HOST, DEFAULT_ZOOKEEPER_PORT),
-                'Zookeper queue for cache tasks fetching'),
+         zhost=('z', '', 'Zookeper queue for cache tasks fetching'),
+         config=('c', DEFAULT_CONFIG_PATH, 'Application config file'),
          log_config=('l', DEFAULT_LOGGING_CONFIG_PATH, 'Application logging config file'),
          daemonize=('', False, 'Daemonize this process'),
          pidfile=('', None, 'Use this pidfile'),
@@ -86,9 +83,17 @@ def main(group=('g', '', 'Group id of node where daemon is being run'),
     """This script starts gatling gun daemon that
     distributes keys to designated cache nodes"""
 
-    if not elliptics or not zhost or not group or not log_config:
-        main.help()
-        sys.exit(1)
+    # if not enode or not zhost or not group:
+    #     main.help()
+    #     sys.exit(1)
+
+    main_config = ConfigParser()
+    main_config.read(config)
+
+    group = group or main_config.get('global', 'group')
+    enode = enode or main_config.get('elliptics', 'host')
+    zhost = zhost or main_config.get('zookeeper', 'host')
+    user = user or main_config.get('global', 'user')
 
     if daemonize:
         d = daemon.Daemon(pidfile or DEFAULT_PIDFILE, user)
@@ -103,8 +108,8 @@ def run(group, enode, zhost, config_fname):
     ehost, eport = parse_address(enode)
     group = int(group)
 
-    config_ = config.JsonConfig(config_fname)
-    setup_logger(config_['logging'])
+    logging_config = JsonConfig(config_fname)
+    setup_logger(logging_config['logging'])
 
     logger = logging.getLogger()
     logger.info('Group %d' % group)
@@ -115,6 +120,8 @@ def run(group, enode, zhost, config_fname):
 
     gun = Gun(node)
     logger.info('Connection to transport node %s' % zhost)
+    if isinstance(zhost, unicode):
+        zhost = zhost.encode('utf-8')
     transport = Transport(host=zhost, group=group, timeout=3)
 
     logger.info('Starting task processing')
