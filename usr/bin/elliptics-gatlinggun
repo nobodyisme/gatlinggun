@@ -20,6 +20,8 @@ from gatlinggun.transport import ZkTransport as Transport
 DEFAULT_ZOOKEEPER_HOST = '127.0.0.1'
 DEFAULT_ZOOKEEPER_PORT = '2181'
 
+DEFAULT_LOGGING_CONFIG_PATH = '/etc/elliptics/gatlinggun/logging.conf'
+
 DEFAULT_LOGGING_PATH = '/var/log/gatlinggun/elliptics.log'
 DEFAULT_LOGGING_MASK = 31
 
@@ -71,29 +73,29 @@ def parse_address(s, default_port=None):
     return host, port
 
 
-@command(usage='-g GROUP -e ELLIPTICS-NODE -z ZOOKEEPER-HOST -c CONFIG '
+@command(usage='-g GROUP -e ELLIPTICS-NODE -z ZOOKEEPER-HOST -l LOGGING_CONFIG '
                '[--daemonize] [--pidfile PIDFILE] [--user USER]')
 def main(group=('g', '', 'Group id of node where daemon is being run'),
          enode=('e', '', 'Elliptics node which daemon will use for cache distribution'),
          zhost=('z', '%s:%s' % (DEFAULT_ZOOKEEPER_HOST, DEFAULT_ZOOKEEPER_PORT),
                 'Zookeper queue for cache tasks fetching'),
-         config=('c', '', 'Application config file'),
+         log_config=('l', DEFAULT_LOGGING_CONFIG_PATH, 'Application logging config file'),
          daemonize=('', False, 'Daemonize this process'),
          pidfile=('', None, 'Use this pidfile'),
          user=('', None, '')):
     """This script starts gatling gun daemon that
     distributes keys to designated cache nodes"""
 
-    if not elliptics or not zhost or not group or not config:
+    if not elliptics or not zhost or not group or not log_config:
         main.help()
         sys.exit(1)
 
     if daemonize:
         d = daemon.Daemon(pidfile or DEFAULT_PIDFILE, user)
         d.run = run
-        d.start(group, enode, zhost, config)
+        d.start(group, enode, zhost, log_config)
     else:
-        run(group, enode, zhost, config)
+        run(group, enode, zhost, log_config)
 
 
 def run(group, enode, zhost, config_fname):

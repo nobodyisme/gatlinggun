@@ -8,3 +8,8 @@ DEB_PYTHON_INSTALL_ARGS_ALL=--prefix=/usr --no-compile -O0 --install-layout=deb
 
 include /usr/share/cdbs/1/rules/debhelper.mk
 include /usr/share/cdbs/1/class/python-distutils.mk
+
+install/elliptics-gatlinggun::
+	mkdir -p debian/tmp/etc/elliptics/gatlinggun
+	cp etc/gatlinggun.conf debian/tmp/etc/elliptics/gatlinggun/gatlinggun.conf
+	cp etc/logging.conf debian/tmp/etc/elliptics/gatlinggun/logging.conf
