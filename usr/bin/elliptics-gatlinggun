@@ -13,6 +13,7 @@ from gatlinggun.config import JsonConfig
 from gatlinggun import daemon
 from gatlinggun.errors import ConnectionError, InvalidDataError, EmptyQueue
 from gatlinggun.gun import Gun
+from gatlinggun import sync
 from gatlinggun.transport import ZkTransport as Transport
 
 
@@ -87,7 +88,7 @@ def main(group=('g', '', 'Group id of node where daemon is being run'),
     #     main.help()
     #     sys.exit(1)
 
-    main_config = ConfigParser()
+    main_config = ConfigParser({'sync_keys_period': '60'})
     main_config.read(config)
 
     group = group or main_config.get('global', 'group')
@@ -98,24 +99,25 @@ def main(group=('g', '', 'Group id of node where daemon is being run'),
     if daemonize:
         d = daemon.Daemon(pidfile or DEFAULT_PIDFILE, user)
         d.run = run
-        d.start(group, enode, zhost, log_config)
+        d.start(group, enode, zhost, main_config, log_config)
     else:
-        run(group, enode, zhost, log_config)
+        run(group, enode, zhost, main_config, log_config)
 
 
-def run(group, enode, zhost, config_fname):
+def run(group, enode, zhost, config, log_config):
     parts = enode.split(':', 1)
     ehost, eport = parse_address(enode)
     group = int(group)
 
-    logging_config = JsonConfig(config_fname)
+    logging_config = JsonConfig(log_config)
     setup_logger(logging_config['logging'])
 
     logger = logging.getLogger()
     logger.info('Group %d' % group)
 
     logger.info('Connection to elliptics node %s:%s' % (ehost, eport))
-    node = elliptics.Node(elliptics.Logger(DEFAULT_LOGGING_PATH, DEFAULT_LOGGING_MASK))
+    node = elliptics.Node(elliptics.Logger(config.get('elliptics', 'log'),
+                                           config.getint('elliptics', 'log_mask')))
     node.add_remote(ehost, eport)
 
     gun = Gun(node)
@@ -123,6 +125,10 @@ def run(group, enode, zhost, config_fname):
     if isinstance(zhost, unicode):
         zhost = zhost.encode('utf-8')
     transport = Transport(host=zhost, group=group, timeout=3)
+
+    synchronizer = sync.Synchronizer(node, group, transport)
+    pth = sync.PeriodThread(synchronizer.sync_keys,
+                            config.getint('global', 'sync_keys_period')).start()
 
     logger.info('Starting task processing')
 
