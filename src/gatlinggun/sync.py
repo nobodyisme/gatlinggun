@@ -69,13 +69,3 @@ class Synchronizer(object):
             except elliptics.TimeoutError:
                 logging.info('Sync keys: timeout for key %s' % key['key'])
                 pass
-
-
-if __name__ == '__main__':
-    def test():
-        print "shit"
-    th = PeriodThread(test, 5)
-    th.daemon = True
-    th.start()
-    time.sleep(30)
-
