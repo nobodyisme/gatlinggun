@@ -51,8 +51,8 @@ class Gun(object):
         self.session.add_groups(from_)
         try:
             size = self.read(key, fname)
-        except Exception:
-            raise ConnectionError('Failed to read data for key %s, will be retried' % key)
+        except Exception as e:
+            raise ConnectionError('Failed to read data for key %s, will be retried (%s)' % (key, e))
 
         logger.info('Data read into tmp file: %s' % fname)
 

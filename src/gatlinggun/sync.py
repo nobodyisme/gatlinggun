@@ -45,6 +45,7 @@ class Synchronizer(object):
         logging.info('Syncing keys for group %s' % self.group)
 
         self.__sync_uploaded_keys(keys)
+        self.__sync_removed_keys(keys)
 
         logging.info('Group %s: keys sync completed' % self.group)
 
@@ -69,3 +70,40 @@ class Synchronizer(object):
             except elliptics.TimeoutError:
                 logging.info('Sync keys: timeout for key %s' % key['key'])
                 pass
+
+    ALL_KEYS = elliptics.IteratorRange()
+    ALL_KEYS.key_begin = elliptics.Id([0] * 64, 0)
+    ALL_KEYS.key_end = elliptics.Id([255] * 64, 0)
+
+    def __sync_removed_keys(self, keys):
+
+        s = elliptics.Session(self.node)
+        s.set_ioflags(elliptics.io_flags.nodata)
+        s.add_groups([self.group])
+
+        remote_keys = set()
+        for key in keys:
+            eid = elliptics.Id(key['key'])
+            try:
+                s.lookup(eid)
+            except elliptics.NotFoundError:
+                pass
+            remote_keys.add(tuple(eid.id))
+
+        remove_keys = []
+
+        iterator = s.start_iterator(elliptics.Id([0] * 64, 0), [self.ALL_KEYS],
+                                    elliptics.iterator_types.network,
+                                    elliptics.iterator_flags.key_range,
+                                    elliptics.Time(0, 0),
+                                    elliptics.Time(2 ** 64 - 1, 2 ** 64 - 1))
+        for item in iterator:
+            if not tuple(item.response.key.id) in remote_keys:
+                remove_keys.append(item.response.key)
+
+        for eid in remove_keys:
+            try:
+                logging.info('Removing local key %s, not found on remote' % repr(eid))
+                s.remove(eid)
+            except elliptics.NotFoundError:
+                logging.info('Tried to remove key %s, but it was not found anymore' % eid)
