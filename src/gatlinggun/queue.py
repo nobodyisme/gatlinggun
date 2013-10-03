@@ -3,7 +3,7 @@ Zookeeper based queue implementations.
 """
 
 import uuid
-from kazoo.exceptions import NoNodeError, NodeExistsError
+from kazoo.exceptions import NoNodeError, NodeExistsError, SessionExpiredError
 from kazoo.retry import ForceRetryError
 from kazoo.protocol.states import EventType
 from kazoo.recipe.queue import BaseQueue
@@ -100,8 +100,13 @@ class FilteredLockingQueue(BaseQueue):
             return False
         lock_id, _ = self.processing_element
         lock_path = "{path}/{id}".format(path=self._lock_path, id=lock_id)
-        self.client.sync(lock_path)
-        value, stat = self.client.retry(self.client.get, lock_path)
+        try:
+            self.client.sync(lock_path)
+            value, stat = self.client.retry(self.client.get, lock_path)
+        except (NoNodeError, SessionExpiredError):
+            # node has already been removed, probably after session expiration
+            self.processing_element = None
+            raise
         return value == self.id
 
     def consume(self):
