@@ -124,7 +124,7 @@ class Gun(object):
             # keys are already removed from destination groups
             pass
         except Exception as e:
-            raise ConnectionError('Failed to remove key %s: %s' % e)
+            raise ConnectionError('Failed to remove key %s: %s' % (key, e))
 
     def __del__(self):
         shutil.rmtree(self.tmpdir)
