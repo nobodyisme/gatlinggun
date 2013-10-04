@@ -11,7 +11,10 @@ from logger import logger
 
 class Gun(object):
 
-    CHUNK_SIZE = 10 * 1024 * 1024  # 10 Mb
+    READ_CHUNK_SIZE = 10 * 1024 * 1024  # 10 Mb
+    # write chunk size is set big enough in effort to write all required data
+    # in one elliptics.write_data call (should be set minding wait_timeout config setting)
+    WRITE_CHUNK_SIZE = 500 * 1024 * 1024
 
     WRITE_RETRY_NUM = 5
     READ_RETRY_NUM = 3
@@ -81,15 +84,15 @@ class Gun(object):
         size = self.session.lookup(eid)[2]
 
         with open(fname, 'wb') as f:
-            for i in xrange(int(math.ceil(float(size) / self.CHUNK_SIZE))):
+            for i in xrange(int(math.ceil(float(size) / self.READ_CHUNK_SIZE))):
                 for retries in xrange(self.READ_RETRY_NUM):
                     try:
-                        chunk = self.session.read_data(eid, i * self.CHUNK_SIZE, self.CHUNK_SIZE)
+                        chunk = self.session.read_data(eid, i * self.READ_CHUNK_SIZE, self.READ_CHUNK_SIZE)
                         break
                     except Exception as e:
-                        logging.info('Error while reading key %s: type %s, msg: %s' % (key, type(e), e))
+                        logger.info('Error while reading key %s: type %s, msg: %s' % (key, type(e), e))
                 else:
-                    raise ConnectionError('Failed to read key %s: offset %s / total %s' % (key, i * self.CHUNK_SIZE))
+                    raise ConnectionError('Failed to read key %s: offset %s / total %s' % (key, i * self.READ_CHUNK_SIZE))
                 f.write(chunk)
 
         return size
@@ -98,18 +101,18 @@ class Gun(object):
         eid = elliptics.Id(key)
 
         with open(fname, 'rb') as f:
-            for i in xrange(int(math.ceil(float(size) / self.CHUNK_SIZE))):
-                data = f.read(self.CHUNK_SIZE)
+            for i in xrange(int(math.ceil(float(size) / self.WRITE_CHUNK_SIZE))):
+                data = f.read(self.WRITE_CHUNK_SIZE)
                 for retries in xrange(self.WRITE_RETRY_NUM):
                     try:
-                        logging.debug('Writing key %s: len %s, offset %s' % (key, len(data), i * self.CHUNK_SIZE))
-                        self.session.write_data(eid, data, i * self.CHUNK_SIZE)
+                        logger.debug('Writing key %s: len %s, offset %s' % (key, len(data), i * self.WRITE_CHUNK_SIZE))
+                        self.session.write_data(eid, data, i * self.WRITE_CHUNK_SIZE)
                         break
                     except Exception as e:
-                        logging.info('Error while writing key %s: type %s, msg: %s' % (key, type(e), e))
+                        logger.info('Error while writing key %s: type %s, msg: %s' % (key, type(e), e))
                         pass
                 else:
-                    raise ConnectionError('Failed to write key %s: offset %s / total %s' % (key, i * self.CHUNK_SIZE, size))
+                    raise ConnectionError('Failed to write key %s: offset %s / total %s' % (key, i * self.WRITE_CHUNK_SIZE, size))
 
     def remove(self, key):
         eid = elliptics.Id(key)
