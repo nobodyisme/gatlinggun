@@ -15,7 +15,7 @@ logger = logging.getLogger('gatlinggun')
 
 class Gun(object):
 
-    CHUNK_SIZE = 1024 * 1024  # 1 Mb
+    CHUNK_SIZE = 10 * 1024 * 1024  # 10 Mb
 
     WRITE_RETRY_NUM = 5
     READ_RETRY_NUM = 3
