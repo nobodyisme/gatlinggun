@@ -41,8 +41,9 @@ def setup_logger(log_config):
 
     formatters = {}
     for formatter, settings in log_config['formatters'].iteritems():
-        class_ = import_object(settings['class'])
-        formatters[formatter] = class_()
+        settings_ = copy.copy(settings)
+        class_ = import_object(settings_.pop('class'))
+        formatters[formatter] = class_(**settings_)
 
     handlers = {}
     for handler, settings in log_config['handlers'].iteritems():
@@ -88,7 +89,7 @@ def main(group=('g', '', 'Group id of node where daemon is being run'),
     #     main.help()
     #     sys.exit(1)
 
-    main_config = ConfigParser({'sync_keys_period': '60'})
+    main_config = ConfigParser({'sync_keys_period': '300'})
     main_config.read(config)
 
     group = group or main_config.get('global', 'group')
@@ -151,10 +152,9 @@ def run(group, enode, zhost, config, log_config):
         except EmptyQueue:
             pass
         except Exception as e:
-            logger.error(type(e))
             logger.exception(e)
             # the last key was unlocked, we are sleeping for that matter cause
-            # we are hoping that some other daemon with fetch it and do better
+            # we are hoping that some other daemon will fetch it and do better
             time.sleep(0.5)
             pass
 
