@@ -57,6 +57,7 @@ def setup_logger(log_config):
     for logger, settings in log_config['loggers'].iteritems():
         logger = logging.getLogger(logger)
         logger.setLevel(getattr(logging, settings.get('level', 'NOTSET')))
+        logger.propagate = settings.get('propagate', True)
         for handler in settings['handler']:
             logger.addHandler(handlers[handler])
 
@@ -144,7 +145,8 @@ def run(group, enode, zhost, config, log_config):
                     raise EmptyQueue('No item fetched')
                 task = json.loads(item)
 
-                logger.info('Task %s fetched: %s' % (task['key'], task))
+                logger.info('Task %s fetched' % task['key'])
+                logger.debug('Task %s: %s' % (task['key'], task))
                 gun.process(task)
                 logger.info('Task %s processed' % (task['key'],))
 
