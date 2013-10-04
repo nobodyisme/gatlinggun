@@ -13,15 +13,13 @@ from gatlinggun.config import JsonConfig
 from gatlinggun import daemon
 from gatlinggun.errors import ConnectionError, InvalidDataError, EmptyQueue
 from gatlinggun.gun import Gun
+from gatlinggun.logger import logger
 from gatlinggun import sync
 from gatlinggun.transport import ZkTransport as Transport
 
 
 DEFAULT_CONFIG_PATH = '/etc/elliptics/gatlinggun/gatlinggun.conf'
 DEFAULT_LOGGING_CONFIG_PATH = '/etc/elliptics/gatlinggun/logging.conf'
-
-DEFAULT_LOGGING_PATH = '/var/log/gatlinggun/elliptics.log'
-DEFAULT_LOGGING_MASK = 31
 
 DEFAULT_PIDFILE = '/var/run/elliptics-gatlinggun/gatlinggun'
 

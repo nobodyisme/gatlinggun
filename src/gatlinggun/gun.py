@@ -1,4 +1,3 @@
-import logging
 import math
 import os
 import os.path
@@ -8,10 +7,7 @@ import tempfile
 import elliptics
 
 from errors import ConnectionError, InvalidDataError
-
-
-logger = logging.getLogger('gatlinggun')
-
+from logger import logger
 
 class Gun(object):
 
@@ -75,7 +71,7 @@ class Gun(object):
         if not from_:
             raise InvalidDataError('Groups are not properly defined for key "%s"' % key)
 
-        logging.info('Removing key %s from groups %s' % (key, from_))
+        logger.info('Removing key %s from groups %s' % (key, from_))
 
         self.session.add_groups(from_)
         self.remove(key)

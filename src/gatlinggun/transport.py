@@ -1,13 +1,10 @@
 from contextlib import contextmanager
 import json
-import logging
 
 from kazoo.client import KazooClient
 from queue import FilteredLockingQueue
 
 from errors import ConnectionError, InvalidDataError
-
-logger = logging.getLogger('gatlinggun')
 
 
 class ZkTransport(object):

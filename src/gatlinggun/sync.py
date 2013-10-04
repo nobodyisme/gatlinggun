@@ -1,5 +1,4 @@
 import json
-import logging
 import time
 import threading
 
@@ -7,7 +6,8 @@ import elliptics
 import msgpack
 from cocaine.services import Service
 
-from gatlinggun.gun import Gun
+from gun import Gun
+from logger import logger
 
 
 class PeriodThread(threading.Thread):
@@ -23,7 +23,7 @@ class PeriodThread(threading.Thread):
             try:
                 self.job()
             except Exception as e:
-                logging.error('Job failed: %s' % e)
+                logger.error('Job failed: %s' % e)
                 pass
             time.sleep(self.period)
 
@@ -37,17 +37,17 @@ class Synchronizer(object):
         self.transport = transport
 
     def sync_keys(self):
-        logging.info('Group %s: keys sync started' % self.group)
+        logger.info('Group %s: keys sync started' % self.group)
 
         keys = self.service.enqueue('get_cached_keys_by_group', msgpack.packb(self.group)).get()
         if not keys:
             return
-        logging.info('Syncing keys for group %s' % self.group)
+        logger.info('Syncing keys for group %s' % self.group)
 
         self.__sync_uploaded_keys(keys)
         self.__sync_removed_keys(keys)
 
-        logging.info('Group %s: keys sync completed' % self.group)
+        logger.info('Group %s: keys sync completed' % self.group)
 
     def __sync_uploaded_keys(self, keys):
         s = elliptics.Session(self.node)
@@ -57,7 +57,7 @@ class Synchronizer(object):
             try:
                 s.lookup(elliptics.Id(key['key']))
             except elliptics.NotFoundError:
-                logging.info('Key %s is missing, adding download task' % key['key'])
+                logger.info('Key %s is missing, adding download task' % key['key'])
 
                 # put download key task to task queue
                 task = {'key': key['key'],
@@ -68,7 +68,7 @@ class Synchronizer(object):
                 pass
 
             except elliptics.TimeoutError:
-                logging.info('Sync keys: timeout for key %s' % key['key'])
+                logger.info('Sync keys: timeout for key %s' % key['key'])
                 pass
 
     ALL_KEYS = elliptics.IteratorRange()
@@ -103,7 +103,7 @@ class Synchronizer(object):
 
         for eid in remove_keys:
             try:
-                logging.info('Removing local key %s, not found on remote' % repr(eid))
+                logger.info('Removing local key %s, not found on remote' % repr(eid))
                 s.remove(eid)
             except elliptics.NotFoundError:
-                logging.info('Tried to remove key %s, but it was not found anymore' % eid)
+                logger.info('Tried to remove key %s, but it was not found anymore' % eid)
