@@ -10,6 +10,9 @@ from gun import Gun
 from logger import logger
 
 
+META_MANDATORY_KEYS = ['metabalancer\0symmetric_groups']
+
+
 class PeriodThread(threading.Thread):
 
     def __init__(self, job, period, daemon=True, *args, **kwargs):
@@ -23,7 +26,7 @@ class PeriodThread(threading.Thread):
             try:
                 self.job()
             except Exception as e:
-                logger.error('Job failed: %s' % e)
+                logger.exception('Job failed: %s, %s' % (type(e), str(e)))
                 pass
             time.sleep(self.period)
 
@@ -82,8 +85,11 @@ class Synchronizer(object):
         s.add_groups([self.group])
 
         remote_keys = set()
-        for key in keys:
-            eid = elliptics.Id(key['key'])
+
+        # there are some keys that should not be removed, like group meta information,
+        # such keys are stored in META_MANDATORY_KEYS
+        for key in map(lambda k: k['key'], keys) + META_MANDATORY_KEYS:
+            eid = elliptics.Id(key)
             try:
                 s.lookup(eid)
             except elliptics.NotFoundError:

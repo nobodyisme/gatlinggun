@@ -50,6 +50,8 @@ class Gun(object):
         self.session.add_groups(from_)
         try:
             size = self.read(key, fname)
+        except InvalidDataError:
+            raise
         except Exception as e:
             raise ConnectionError('Failed to read data for key %s, will be retried (%s)' % (key, e))
 
@@ -81,7 +83,10 @@ class Gun(object):
 
     def read(self, key, fname):
         eid = elliptics.Id(key)
-        size = self.session.lookup(eid)[2]
+        try:
+            size = self.session.lookup(eid)[2]
+        except elliptics.NotFoundError:
+            raise InvalidDataError('Key %s is not found on source groups' % key)
 
         with open(fname, 'wb') as f:
             for i in xrange(int(math.ceil(float(size) / self.READ_CHUNK_SIZE))):

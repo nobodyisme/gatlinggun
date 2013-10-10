@@ -1,7 +1,6 @@
 """
 Zookeeper based queue implementations.
 """
-
 import uuid
 from kazoo.exceptions import NoNodeError, NodeExistsError, SessionExpiredError
 from kazoo.retry import ForceRetryError
