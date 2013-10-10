@@ -52,6 +52,9 @@ class Gun(object):
             size = self.read(key, fname)
         except InvalidDataError:
             raise
+        except elliptics.Error:
+            # Group is not available (No such device ot address: -6)
+            raise
         except Exception as e:
             raise ConnectionError('Failed to read data for key %s, will be retried (%s)' % (key, e))
 
@@ -62,6 +65,9 @@ class Gun(object):
         self.session.add_groups(to_)
         try:
             self.write(key, fname, size)
+        except elliptics.Error:
+            # Group is not available (No such device ot address: -6)
+            raise
         except Exception:
             raise ConnectionError('Failed to write data for key %s, will be retried' % key)
         finally:
@@ -127,6 +133,9 @@ class Gun(object):
         except elliptics.NotFoundError:
             # keys are already removed from destination groups
             pass
+        except elliptics.Error:
+            # Group is not available (No such device ot address: -6)
+            raise
         except Exception as e:
             raise ConnectionError('Failed to remove key %s: %s' % (key, e))
 

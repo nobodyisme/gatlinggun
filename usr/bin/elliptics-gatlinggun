@@ -159,7 +159,7 @@ def run(group, enode, zhost, config, log_config):
             logger.exception(e)
             # the last key was unlocked, we are sleeping for that matter cause
             # we are hoping that some other daemon will fetch it and do better
-            time.sleep(0.5)
+            time.sleep(1)
             pass
 
 
