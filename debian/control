@@ -9,5 +9,5 @@ Vcs-Git: git://github.com/nobodyisme/gatlinggun.git
 
 Package: elliptics-gatlinggun
 Architecture: amd64
-Depends: ${shlibs:Depends}, ${misc:Depends}, ${python:Depends}, python-kazoo, python-opster
+Depends: ${shlibs:Depends}, ${misc:Depends}, ${python:Depends}, python-kazoo, python-opster, cocaine-framework-python (>= 0.10.6.19)
 Description: Keys dispatcher for elliptics storage
