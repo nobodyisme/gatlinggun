@@ -1,4 +1,4 @@
-# #!/bin/sh
+#!/bin/sh
 
 case $1 in
     configure|abort-upgrade|abort-remove|abort-deconfigure)
