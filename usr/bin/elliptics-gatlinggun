@@ -3,6 +3,7 @@ from ConfigParser import ConfigParser
 import copy
 import json
 import logging
+import os.path
 import sys
 import time
 
@@ -18,8 +19,13 @@ from gatlinggun import sync
 from gatlinggun.transport import ZkTransport as Transport
 
 
-DEFAULT_CONFIG_PATH = '/etc/elliptics/gatlinggun/gatlinggun.conf'
-DEFAULT_LOGGING_CONFIG_PATH = '/etc/elliptics/gatlinggun/logging.conf'
+DEFAULT_CONFIG_PATH = '/etc/elliptics/gatlinggun/gatlinggun.default.conf'
+CONFIG_PATH = '/etc/elliptics/gatlinggun/gatlinggun.conf'
+
+DEFAULT_LOGGING_CONFIG_PATH = '/etc/elliptics/gatlinggun/logging.default.conf'
+LOGGING_CONFIG_PATH = '/etc/elliptics/gatlinggun/logging.conf'
+
+GROUP_ID_PATH = '/etc/elliptics/gatlinggun/group.id'
 
 DEFAULT_PIDFILE = '/var/run/elliptics-gatlinggun/gatlinggun'
 
@@ -76,8 +82,8 @@ def parse_address(s, default_port=None):
 def main(group=('g', '', 'Group id of node where daemon is being run'),
          enode=('e', '', 'Elliptics node which daemon will use for cache distribution'),
          zhost=('z', '', 'Zookeper queue for cache tasks fetching'),
-         config=('c', DEFAULT_CONFIG_PATH, 'Application config file'),
-         log_config=('l', DEFAULT_LOGGING_CONFIG_PATH, 'Application logging config file'),
+         config=('c', None, 'Application config file'),
+         log_config=('l', None, 'Application logging config file'),
          daemonize=('', False, 'Daemonize this process'),
          pidfile=('', None, 'Use this pidfile'),
          user=('', None, '')):
@@ -90,9 +96,31 @@ def main(group=('g', '', 'Group id of node where daemon is being run'),
 
     main_config = ConfigParser({'sync_keys_period': '300',
                                 'wait_timeout': '5'})
-    main_config.read(config)
 
-    group = group or main_config.get('global', 'group')
+    use_config = DEFAULT_CONFIG_PATH
+    if config:
+        use_config = config
+    elif os.path.exists(CONFIG_PATH):
+        use_config = CONFIG_PATH
+
+    if not main_config.read(use_config):
+        sys.stderr.write('Failed to open config file: %s\n' % use_config)
+        exit(1)
+
+    use_log_config = DEFAULT_LOGGING_CONFIG_PATH
+    if log_config:
+        use_log_config = log_config
+    elif os.path.exists(LOGGING_CONFIG_PATH):
+        use_log_config = LOGGING_CONFIG_PATH
+
+    group = ((group and int(group)) or
+             (os.path.exists(GROUP_ID_PATH) and int(open(GROUP_ID_PATH).read())) or
+             main_config.getint('global', 'group'))
+
+    if not group:
+        sys.stderr.write('Valid group id is required, current id is %s\n' % group)
+        exit(1)
+
     enode = enode or main_config.get('elliptics', 'host')
     zhost = zhost or main_config.get('zookeeper', 'host')
     user = user or main_config.get('global', 'user')
@@ -100,15 +128,14 @@ def main(group=('g', '', 'Group id of node where daemon is being run'),
     if daemonize:
         d = daemon.Daemon(pidfile or DEFAULT_PIDFILE, user)
         d.run = run
-        d.start(group, enode, zhost, main_config, log_config)
+        d.start(group, enode, zhost, main_config, use_log_config)
     else:
-        run(group, enode, zhost, main_config, log_config)
+        run(group, enode, zhost, main_config, use_log_config)
 
 
 def run(group, enode, zhost, config, log_config):
     parts = enode.split(':', 1)
     ehost, eport = parse_address(enode)
-    group = int(group)
 
     logging_config = JsonConfig(log_config)
     setup_logger(logging_config['logging'])
