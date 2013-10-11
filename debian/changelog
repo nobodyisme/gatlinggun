@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.2-4) unstable; urgency=low
+
+  * Configuration precedences
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Fri, 11 Oct 2013 19:33:50 +0400
+
 elliptics-gatlinggun (0.2-3) unstable; urgency=low
 
   * More installation fixes
