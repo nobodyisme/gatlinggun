@@ -40,7 +40,6 @@ class ZkTransport(object):
             self.q.consume()
             raise
         except Exception as e:
-            # can we try to unlock the task?
             self.q.unlock()
             raise
 

@@ -1,7 +1,9 @@
+import atexit
 import math
 import os
 import os.path
 import shutil
+import signal
 import tempfile
 
 import elliptics
@@ -25,6 +27,8 @@ class Gun(object):
     def __init__(self, node):
         self.session = elliptics.Session(node)
         self.tmpdir = tempfile.mkdtemp(prefix='gatlinggun')
+        atexit.register(self.clean)
+        signal.signal(signal.SIGTERM, lambda signum, stack_frame: exit(1))
 
     def process(self, task):
         if not 'action' in task:
@@ -139,5 +143,11 @@ class Gun(object):
         except Exception as e:
             raise ConnectionError('Failed to remove key %s: %s' % (key, e))
 
+    def clean(self):
+        try:
+            shutil.rmtree(self.tmpdir)
+        except Exception:
+            pass
+
     def __del__(self):
-        shutil.rmtree(self.tmpdir)
+        self.clean()
