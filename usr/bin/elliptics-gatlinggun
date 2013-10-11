@@ -150,11 +150,16 @@ def run(group, enode, zhost, config, log_config):
                 gun.process(task)
                 logger.info('Task %s processed' % (task['key'],))
 
-        except (ConnectionError, InvalidDataError) as e:
+        except ConnectionError as e:
+            logger.exception(e)
+            time.sleep(1)
+
+        except InvalidDataError as e:
             logger.error(e)
-            pass
+
         except EmptyQueue:
             pass
+
         except Exception as e:
             logger.exception(e)
             # the last key was unlocked, we are sleeping for that matter cause
