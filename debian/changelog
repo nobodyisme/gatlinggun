@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.2-10) unstable; urgency=low
+
+  * Fix for interpreter replacement in executable script
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Mon, 14 Oct 2013 22:55:14 +0400
+
 elliptics-gatlinggun (0.2-9) unstable; urgency=low
 
   * Do not use elliptics config for cache instance path composing

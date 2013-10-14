@@ -9,5 +9,5 @@ setup(
     packages=['gatlinggun'],
     package_dir={'gatlinggun': 'src/gatlinggun'},
     license="LGPLv3+",
-    scripts=['usr/bin/elliptics-gatlinggun']
+    scripts=[]
 )
