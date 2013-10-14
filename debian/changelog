@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.2-9) unstable; urgency=low
+
+  * Do not use elliptics config for cache instance path composing
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Mon, 14 Oct 2013 20:02:41 +0400
+
 elliptics-gatlinggun (0.2-8) unstable; urgency=low
 
   * Minor fix

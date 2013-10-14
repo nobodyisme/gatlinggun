@@ -12,7 +12,7 @@ from opster import command
 
 import elliptics
 from cocaine.services import Service
-from gatlinggun.config import JsonConfig, EllipticsConfigParser
+from gatlinggun.config import JsonConfig
 from gatlinggun import daemon
 from gatlinggun.errors import ConnectionError, InvalidDataError, EmptyQueue
 from gatlinggun.gun import Gun
@@ -91,16 +91,9 @@ def get_group_from_mastermind(service):
             raise StopIteration()
 
 
-def _prepare(service, elliptics_config=None, group=None):
+def _prepare(service, config=None, group=None):
 
-    if not elliptics_config:
-        elliptics_config = DEFAULT_ELLIPTICS_CONFIG_PATH
-        if os.path.exists(ELLIPTICS_CONFIG_PATH):
-            elliptics_config = ELLIPTICS_CONFIG_PATH
-
-    p = EllipticsConfigParser()
-    p.read(elliptics_config)
-    root_dir = p.get('global', 'root_dir')
+    root_dir = config.get('elliptics', 'root_dir')
 
     if group:
         groups = iter([int(group)])
@@ -169,10 +162,7 @@ def main(group=('g', None, 'Group id of node where daemon is being run'),
     elif os.path.exists(LOGGING_CONFIG_PATH):
         use_log_config = LOGGING_CONFIG_PATH
 
-    enode = enode or main_config.get('elliptics', 'host')
-    zhost = zhost or main_config.get('zookeeper', 'host')
     mastermind_host = mastermind_host or main_config.get('mastermind', 'host')
-    user = user or main_config.get('global', 'user')
 
     mastermind_hosts = mastermind_host.split(',')
     mastermind = None
@@ -187,8 +177,12 @@ def main(group=('g', None, 'Group id of node where daemon is being run'),
         exit(1)
 
     if prepare:
-        _prepare(mastermind, group=group)
+        _prepare(mastermind, config=main_config, group=group)
         return
+
+    enode = enode or main_config.get('elliptics', 'host')
+    zhost = zhost or main_config.get('zookeeper', 'host')
+    user = user or main_config.get('global', 'user')
 
     group = ((group and int(group)) or
              (os.path.exists(GROUP_ID_PATH) and int(open(GROUP_ID_PATH).read())) or
