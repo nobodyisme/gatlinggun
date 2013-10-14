@@ -82,18 +82,16 @@ def parse_address(s, default_port=None):
     return host, port
 
 
-def get_group_from_mastermind(host):
-    s = Service('mastermind', host=host)
-
+def get_group_from_mastermind(service):
     while True:
         try:
-            res = s.enqueue('get_next_group_number', msgpack.packb(1)).get()
+            res = service.enqueue('get_next_group_number', msgpack.packb(1)).get()
             yield res
         except Exception as e:
             raise StopIteration()
 
 
-def _prepare(mastermind_host, elliptics_config=None, group=None):
+def _prepare(service, elliptics_config=None, group=None):
 
     if not elliptics_config:
         elliptics_config = DEFAULT_ELLIPTICS_CONFIG_PATH
@@ -107,7 +105,7 @@ def _prepare(mastermind_host, elliptics_config=None, group=None):
     if group:
         groups = iter([int(group)])
     else:
-        groups = get_group_from_mastermind(mastermind_host)
+        groups = get_group_from_mastermind(service)
 
     try:
         for l in ['cache']:
@@ -176,8 +174,20 @@ def main(group=('g', None, 'Group id of node where daemon is being run'),
     mastermind_host = mastermind_host or main_config.get('mastermind', 'host')
     user = user or main_config.get('global', 'user')
 
+    mastermind_hosts = mastermind_host.split(',')
+    mastermind = None
+    for host in mastermind_hosts:
+        try:
+            mastermind = Service('mastermind', host=host)
+            break
+        except Exception as e:
+            pass
+    else:
+        sys.stderr.write('Failed to connect to mastermind host: %s\n' % mastermind_host)
+        exit(1)
+
     if prepare:
-        _prepare(mastermind_host, group=group)
+        _prepare(mastermind, group=group)
         return
 
     group = ((group and int(group)) or
@@ -191,12 +201,12 @@ def main(group=('g', None, 'Group id of node where daemon is being run'),
     if daemonize:
         d = daemon.Daemon(pidfile or DEFAULT_PIDFILE, user)
         d.run = run
-        d.start(group, enode, zhost, main_config, use_log_config)
+        d.start(mastermind, group, enode, zhost, main_config, use_log_config)
     else:
-        run(group, enode, zhost, main_config, use_log_config)
+        run(mastermind, group, enode, zhost, main_config, use_log_config)
 
 
-def run(group, enode, zhost, mastermind_host, config, log_config):
+def run(service, group, enode, zhost, config, log_config):
     parts = enode.split(':', 1)
     ehost, eport = parse_address(enode)
 
@@ -220,7 +230,7 @@ def run(group, enode, zhost, mastermind_host, config, log_config):
         zhost = zhost.encode('utf-8')
     transport = Transport(host=zhost, group=group, timeout=3)
 
-    synchronizer = sync.Synchronizer(node, group, transport, mastermind_host=mastermind_host)
+    synchronizer = sync.Synchronizer(node, group, transport, mastermind=service)
     pth = sync.PeriodThread(synchronizer.sync_keys,
                             config.getint('global', 'sync_keys_period')).start()
 

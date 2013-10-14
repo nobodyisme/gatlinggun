@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.2-7) unstable; urgency=low
+
+  * Config accepts several mastermind hosts
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Mon, 14 Oct 2013 19:18:13 +0400
+
 elliptics-gatlinggun (0.2-6) unstable; urgency=low
 
   * Preparation utility

@@ -33,8 +33,8 @@ class PeriodThread(threading.Thread):
 
 class Synchronizer(object):
 
-    def __init__(self, node, group, transport, mastermind_host='localhost'):
-        self.service = Service('mastermind', host=mastermind_host)
+    def __init__(self, node, group, transport, mastermind):
+        self.service = mastermind
         self.node = node
         self.group = group
         self.transport = transport
