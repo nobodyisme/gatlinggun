@@ -7,10 +7,12 @@ import os.path
 import sys
 import time
 
-import elliptics
+import msgpack
 from opster import command
 
-from gatlinggun.config import JsonConfig
+import elliptics
+from cocaine.services import Service
+from gatlinggun.config import JsonConfig, EllipticsConfigParser
 from gatlinggun import daemon
 from gatlinggun.errors import ConnectionError, InvalidDataError, EmptyQueue
 from gatlinggun.gun import Gun
@@ -24,6 +26,9 @@ CONFIG_PATH = '/etc/elliptics/gatlinggun/gatlinggun.conf'
 
 DEFAULT_LOGGING_CONFIG_PATH = '/etc/elliptics/gatlinggun/logging-default.conf'
 LOGGING_CONFIG_PATH = '/etc/elliptics/gatlinggun/logging.conf'
+
+DEFAULT_ELLIPTICS_CONFIG_PATH = '/etc/elliptics/elliptics-default.conf'
+ELLIPTICS_CONFIG_PATH = '/etc/elliptics/elliptics.conf'
 
 GROUP_ID_PATH = '/etc/elliptics/gatlinggun/group.id'
 
@@ -77,16 +82,69 @@ def parse_address(s, default_port=None):
     return host, port
 
 
+def get_group_from_mastermind(host):
+    s = Service('mastermind', host=host)
+
+    while True:
+        try:
+            res = s.enqueue('get_next_group_number', msgpack.packb(1)).get()
+            yield res
+        except Exception as e:
+            raise StopIteration()
+
+
+def _prepare(mastermind_host, elliptics_config=None, group=None):
+
+    if not elliptics_config:
+        elliptics_config = DEFAULT_ELLIPTICS_CONFIG_PATH
+        if os.path.exists(ELLIPTICS_CONFIG_PATH):
+            elliptics_config = ELLIPTICS_CONFIG_PATH
+
+    p = EllipticsConfigParser()
+    p.read(elliptics_config)
+    root_dir = p.get('global', 'root_dir')
+
+    if group:
+        groups = iter([int(group)])
+    else:
+        groups = get_group_from_mastermind(mastermind_host)
+
+    try:
+        for l in ['cache']:
+            if not os.path.isdir(os.path.join(root_dir, l)):
+                continue
+
+            group_id_dir = os.path.join(root_dir, l, 'kdb')
+            if not os.path.isdir(group_id_dir):
+                os.mkdir(group_id_dir)
+
+            group_id_file = os.path.join(group_id_dir, 'group.id')
+            if os.path.exists(group_id_file):
+                continue
+
+            g = groups.next()[0]
+            print "Writing group_id = %d into file %s" % (g, group_id_file)
+
+            with open(group_id_file, 'w') as group_id:
+                group_id.write(str(g))
+
+    except StopIteration:
+        pass
+
+
 @command(usage='-g GROUP -e ELLIPTICS-NODE -z ZOOKEEPER-HOST -l LOGGING_CONFIG '
-               '[--daemonize] [--pidfile PIDFILE] [--user USER]')
-def main(group=('g', '', 'Group id of node where daemon is being run'),
+               '-m MASTERMIND_HOST '
+               '[--daemonize] [--pidfile PIDFILE] [--user USER] [--prepare]')
+def main(group=('g', None, 'Group id of node where daemon is being run'),
          enode=('e', '', 'Elliptics node which daemon will use for cache distribution'),
          zhost=('z', '', 'Zookeper queue for cache tasks fetching'),
+         mastermind_host=('m', '', 'Mastermind cloud host'),
          config=('c', None, 'Application config file'),
          log_config=('l', None, 'Application logging config file'),
          daemonize=('', False, 'Daemonize this process'),
          pidfile=('', None, 'Use this pidfile'),
-         user=('', None, '')):
+         user=('', None, ''),
+         prepare=('', None, 'Prepare elliptics cache instance mount directory and exit')):
     """This script starts gatling gun daemon that
     distributes keys to designated cache nodes"""
 
@@ -113,6 +171,15 @@ def main(group=('g', '', 'Group id of node where daemon is being run'),
     elif os.path.exists(LOGGING_CONFIG_PATH):
         use_log_config = LOGGING_CONFIG_PATH
 
+    enode = enode or main_config.get('elliptics', 'host')
+    zhost = zhost or main_config.get('zookeeper', 'host')
+    mastermind_host = mastermind_host or main_config.get('mastermind', 'host')
+    user = user or main_config.get('global', 'user')
+
+    if prepare:
+        _prepare(mastermind_host, group=group)
+        return
+
     group = ((group and int(group)) or
              (os.path.exists(GROUP_ID_PATH) and int(open(GROUP_ID_PATH).read())) or
              main_config.getint('global', 'group'))
@@ -120,10 +187,6 @@ def main(group=('g', '', 'Group id of node where daemon is being run'),
     if not group:
         sys.stderr.write('Valid group id is required, current id is %s\n' % group)
         exit(1)
-
-    enode = enode or main_config.get('elliptics', 'host')
-    zhost = zhost or main_config.get('zookeeper', 'host')
-    user = user or main_config.get('global', 'user')
 
     if daemonize:
         d = daemon.Daemon(pidfile or DEFAULT_PIDFILE, user)
@@ -133,7 +196,7 @@ def main(group=('g', '', 'Group id of node where daemon is being run'),
         run(group, enode, zhost, main_config, use_log_config)
 
 
-def run(group, enode, zhost, config, log_config):
+def run(group, enode, zhost, mastermind_host, config, log_config):
     parts = enode.split(':', 1)
     ehost, eport = parse_address(enode)
 
@@ -157,7 +220,7 @@ def run(group, enode, zhost, config, log_config):
         zhost = zhost.encode('utf-8')
     transport = Transport(host=zhost, group=group, timeout=3)
 
-    synchronizer = sync.Synchronizer(node, group, transport)
+    synchronizer = sync.Synchronizer(node, group, transport, mastermind_host=mastermind_host)
     pth = sync.PeriodThread(synchronizer.sync_keys,
                             config.getint('global', 'sync_keys_period')).start()
 
