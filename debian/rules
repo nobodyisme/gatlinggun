@@ -11,5 +11,5 @@ include /usr/share/cdbs/1/class/python-distutils.mk
 
 install/elliptics-gatlinggun::
 	mkdir -p debian/tmp/etc/elliptics/gatlinggun
-	cp etc/gatlinggun.default.conf debian/tmp/etc/elliptics/gatlinggun/gatlinggun.default.conf
-	cp etc/logging.default.conf debian/tmp/etc/elliptics/gatlinggun/logging.default.conf
+	cp etc/gatlinggun-default.conf debian/tmp/etc/elliptics/gatlinggun/gatlinggun-default.conf
+	cp etc/logging-default.conf debian/tmp/etc/elliptics/gatlinggun/logging-default.conf

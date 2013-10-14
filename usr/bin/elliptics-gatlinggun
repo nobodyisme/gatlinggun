@@ -19,10 +19,10 @@ from gatlinggun import sync
 from gatlinggun.transport import ZkTransport as Transport
 
 
-DEFAULT_CONFIG_PATH = '/etc/elliptics/gatlinggun/gatlinggun.default.conf'
+DEFAULT_CONFIG_PATH = '/etc/elliptics/gatlinggun/gatlinggun-default.conf'
 CONFIG_PATH = '/etc/elliptics/gatlinggun/gatlinggun.conf'
 
-DEFAULT_LOGGING_CONFIG_PATH = '/etc/elliptics/gatlinggun/logging.default.conf'
+DEFAULT_LOGGING_CONFIG_PATH = '/etc/elliptics/gatlinggun/logging-default.conf'
 LOGGING_CONFIG_PATH = '/etc/elliptics/gatlinggun/logging.conf'
 
 GROUP_ID_PATH = '/etc/elliptics/gatlinggun/group.id'
