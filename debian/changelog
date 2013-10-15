@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.2-11) unstable; urgency=low
+
+  * Fix for python build
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Tue, 15 Oct 2013 11:57:59 +0400
+
 elliptics-gatlinggun (0.2-10) unstable; urgency=low
 
   * Fix for interpreter replacement in executable script
