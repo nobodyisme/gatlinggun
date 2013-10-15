@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.2-13) unstable; urgency=low
+
+  * Fix for executable parameters
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Tue, 15 Oct 2013 19:21:47 +0400
+
 elliptics-gatlinggun (0.2-12) unstable; urgency=low
 
   * Fix for python build
