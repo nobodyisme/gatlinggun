@@ -6,8 +6,10 @@ Build-Depends: debhelper (>= 8.0.0), cdbs, python, python-central
 Standards-Version: 3.9.2
 Homepage: https://github.com/nobodyisme/gatlinggun
 Vcs-Git: git://github.com/nobodyisme/gatlinggun.git
+XS-Python-Version: >= 2.6
 
 Package: elliptics-gatlinggun
 Architecture: amd64
 Depends: ${shlibs:Depends}, ${misc:Depends}, python-kazoo, python-opster, cocaine-framework-python (>= 0.10.6.19)
+XB-Python-Version: >= 2.6
 Description: Keys dispatcher for elliptics storage
