@@ -13,5 +13,7 @@ install/elliptics-gatlinggun::
 	mkdir -p debian/tmp/etc/elliptics/gatlinggun
 	cp etc/gatlinggun-default.conf debian/tmp/etc/elliptics/gatlinggun/gatlinggun-default.conf
 	cp etc/logging-default.conf debian/tmp/etc/elliptics/gatlinggun/logging-default.conf
+
+install/elliptics-gatlinggun-utils::
 	mkdir -p debian/tmp/usr/bin
 	cp usr/bin/elliptics-gatlinggun debian/tmp/usr/bin/elliptics-gatlinggun

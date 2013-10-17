@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.2-15) unstable; urgency=low
+
+  * Separate package for dispatcher executable
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Thu, 17 Oct 2013 18:19:21 +0400
+
 elliptics-gatlinggun (0.2-14) unstable; urgency=low
 
   * Zookeeper session restoration retries
