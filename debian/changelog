@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.2-16) unstable; urgency=low
+
+  * Distributor prefers local dc groups for reading to remote dc groups
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Fri, 18 Oct 2013 15:28:53 +0400
+
 elliptics-gatlinggun (0.2-15) unstable; urgency=low
 
   * Separate package for dispatcher executable

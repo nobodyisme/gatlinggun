@@ -1,15 +1,20 @@
 import atexit
+import itertools
 import math
+import msgpack
 import os
 import os.path
 import shutil
+import socket
 import signal
 import tempfile
 
 import elliptics
 
 from errors import ConnectionError, InvalidDataError
+import inventory
 from logger import logger
+
 
 class Gun(object):
 
@@ -24,8 +29,12 @@ class Gun(object):
     DISTRUBUTE_TASK_ACTION = 'add'
     ELIMINATE_TASK_ACTION = 'remove'
 
-    def __init__(self, node):
+    GROUP_UNKNOWN_DC_ID = 'unknown'
+
+    def __init__(self, node, service):
         self.session = elliptics.Session(node)
+        self.service = service
+        self.host_dc = inventory.get_dc_by_host(socket.gethostname())
         self.tmpdir = tempfile.mkdtemp(prefix='gatlinggun')
         atexit.register(self.clean)
         signal.signal(signal.SIGTERM, lambda signum, stack_frame: exit(1))
@@ -50,8 +59,10 @@ class Gun(object):
 
         fname = os.path.join(self.tmpdir, key)
         # fetch data from source nodes
+        logger.info('Source groups %s' % from_)
+        selected_groups = self.__preferable_groups(from_)
         logger.info('Fetching data from groups %s' % from_)
-        self.session.add_groups(from_)
+        self.session.add_groups(selected_groups)
         try:
             size = self.read(key, fname)
         except InvalidDataError:
@@ -81,6 +92,34 @@ class Gun(object):
                 pass
 
         logger.info('Data was distibuted')
+
+    def __preferable_groups(self, groups):
+        dc_groups = {}
+        dc_group_pairs = [(self.__group_dc(g), g) for g in groups]
+        logger.info('Groups by dc pairs: %s' % (dc_group_pairs,))
+        for dc, gs in itertools.groupby(sorted(dc_group_pairs), lambda x: x[0]):
+            dc_groups[dc] = list(gs)
+
+        return dc_groups.get(self.host_dc, groups)
+
+    def __group_dc(self, g):
+        try:
+            info = self.service.enqueue('get_group_info', msgpack.packb(g)).get()
+        except Exception as e:
+            logger.info('Failed to get group %s info from mastermind (%s)' % (g, e))
+            return self.GROUP_UNKNOWN_DC_ID
+
+        try:
+            addr = info['nodes'][0]['addr']
+        except (IndexError, KeyError):
+            logger.info('Unsupported group %s info structure' % (g,))
+            return self.GROUP_UNKNOWN_DC_ID
+
+        try:
+            return inventory.get_dc_by_host(addr.split(':')[0])
+        except Exception as e:
+            logger.info('Failed to get dc data by host for group %s (%s)' % (g, e))
+            return self.GROUP_UNKNOWN_DC_ID
 
     def eliminate(self, key, from_=None):
         if not from_:

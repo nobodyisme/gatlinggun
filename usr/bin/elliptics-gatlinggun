@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 from ConfigParser import ConfigParser
 import copy
 import json
@@ -16,6 +16,7 @@ from gatlinggun.config import JsonConfig
 from gatlinggun import daemon
 from gatlinggun.errors import ConnectionError, InvalidDataError, EmptyQueue
 from gatlinggun.gun import Gun
+from gatlinggun import inventory
 from gatlinggun.logger import logger
 from gatlinggun import sync
 from gatlinggun.transport import ZkTransport as Transport
@@ -218,7 +219,9 @@ def run(service, group, enode, zhost, config, log_config):
                                            config.getint('elliptics', 'log_mask')), c)
     node.add_remote(ehost, eport)
 
-    gun = Gun(node)
+    inventory.init_inventory(config)
+
+    gun = Gun(node, service)
     logger.info('Connection to transport node %s' % zhost)
     if isinstance(zhost, unicode):
         zhost = zhost.encode('utf-8')
