@@ -98,7 +98,7 @@ class Gun(object):
         dc_group_pairs = [(self.__group_dc(g), g) for g in groups]
         logger.info('Groups by dc pairs: %s' % (dc_group_pairs,))
         for dc, gs in itertools.groupby(sorted(dc_group_pairs), lambda x: x[0]):
-            dc_groups[dc] = list(gs)
+            dc_groups[dc] = [g[1] for g in gs]
 
         return dc_groups.get(self.host_dc, groups)
 

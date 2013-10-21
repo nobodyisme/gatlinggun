@@ -124,15 +124,15 @@ def _prepare(service, config=None, group=None):
         pass
 
 
-@command(usage='-g GROUP -e ELLIPTICS-NODE -z ZOOKEEPER-HOST -l LOGGING_CONFIG '
-               '-m MASTERMIND_HOST '
+@command(usage='-g GROUP -e ELLIPTICS-NODE -z ZOOKEEPER-HOST'
+               '-m MASTERMIND_HOST -l LOGGING_CONFIG'
                '[--daemonize] [--pidfile PIDFILE] [--user USER] [--prepare]')
 def main(group=('g', '', 'Group id of node where daemon is being run'),
          enode=('e', '', 'Elliptics node which daemon will use for cache distribution'),
          zhost=('z', '', 'Zookeper queue for cache tasks fetching'),
          mastermind_host=('m', '', 'Mastermind cloud host'),
-         config=('c', None, 'Application config file'),
-         log_config=('l', None, 'Application logging config file'),
+         config=('c', '', 'Application config file'),
+         log_config=('l', '', 'Application logging config file'),
          daemonize=('', False, 'Daemonize this process'),
          pidfile=('', None, 'Use this pidfile'),
          user=('', None, ''),

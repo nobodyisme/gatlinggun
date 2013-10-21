@@ -13,4 +13,4 @@ def init_inventory(config):
         logger.info('Failed to init inventory object from config: %s' % e)
         pass
 
-get_dc_by_host = inv.get_dc_by_host
+get_dc_by_host = lambda host: inv.get_dc_by_host(host)
