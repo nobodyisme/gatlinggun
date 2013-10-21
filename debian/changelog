@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.2-22) unstable; urgency=low
+
+  * Fix: unlocking item in queue
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Mon, 21 Oct 2013 18:49:15 +0400
+
 elliptics-gatlinggun (0.2-21) unstable; urgency=low
 
   * Fix: broken import
