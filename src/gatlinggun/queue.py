@@ -148,6 +148,8 @@ class FilteredLockingQueue(BaseQueue):
             self.processing_element = None
             return True
         else:
+            # either processing_element is None or node is already locked by someone else
+            self.processing_element = None
             return False
 
     def list(self, func=None):
