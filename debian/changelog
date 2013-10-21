@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.2-19) unstable; urgency=low
+
+  * Syncronization for key is not started if a key is found in tasks queue
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Mon, 21 Oct 2013 16:27:10 +0400
+
 elliptics-gatlinggun (0.2-18) unstable; urgency=low
 
   * Fix for inventory usage

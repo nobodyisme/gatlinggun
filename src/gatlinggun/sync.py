@@ -56,7 +56,19 @@ class Synchronizer(object):
         s = elliptics.Session(self.node)
         s.add_groups([self.group])
 
+        def loads(s):
+            try:
+                return json.loads(s)['key']
+            except Exception:
+                return None
+
+        tasks = set(filter(None, self.transport.q.list(func=loads)))
+        logger.info('Tasks in queue: %s' % (tasks,))
+
         for key in keys:
+            if key['key'] in tasks:
+                logger.info('Task %s found in queue, skipping' % key['key'])
+                continue
             try:
                 s.lookup(elliptics.Id(key['key']))
             except elliptics.NotFoundError:

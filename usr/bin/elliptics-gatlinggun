@@ -227,7 +227,7 @@ def run(service, group, enode, zhost, config, log_config):
         zhost = zhost.encode('utf-8')
     transport = Transport(host=zhost, group=group, timeout=3)
 
-    synchronizer = sync.Synchronizer(node, group, transport, mastermind=service)
+    synchronizer = sync.Synchronizer(node, group, transport, service)
     pth = sync.PeriodThread(synchronizer.sync_keys,
                             config.getint('global', 'sync_keys_period')).start()
 

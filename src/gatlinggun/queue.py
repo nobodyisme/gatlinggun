@@ -150,6 +150,19 @@ class FilteredLockingQueue(BaseQueue):
         else:
             return False
 
+    def list(self, func=None):
+        """Returns list of all entries.
+        If func parameter is supplied, it is applied to each result entry
+        (via map function).
+
+        :returns: List of all entries in the queue.
+        :rtype: list
+        """
+        items = [self._get_data_cached(item)[0] for item in self.client.retry(self.client.get_children, self._entries_path)]
+        if func:
+            return map(func, items)
+        return items
+
     def _inner_get(self, timeout):
         flag = self.client.handler.event_object()
         lock = self.client.handler.lock_object()
