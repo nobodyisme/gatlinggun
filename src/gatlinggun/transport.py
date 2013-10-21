@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 import json
+from time import sleep
 
 from kazoo.client import KazooClient
 from kazoo.exceptions import SessionExpiredError
