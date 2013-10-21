@@ -18,7 +18,7 @@ from logger import logger
 
 class Gun(object):
 
-    READ_CHUNK_SIZE = 10 * 1024 * 1024  # 10 Mb
+    READ_CHUNK_SIZE = 100 * 1024 * 1024  # 10 Mb
     # write chunk size is set big enough in effort to write all required data
     # in one elliptics.write_data call (should be set minding wait_timeout config setting)
     WRITE_CHUNK_SIZE = 500 * 1024 * 1024
@@ -146,7 +146,7 @@ class Gun(object):
                     except Exception as e:
                         logger.info('Error while reading key %s: type %s, msg: %s' % (key, type(e), e))
                 else:
-                    raise ConnectionError('Failed to read key %s: offset %s / total %s' % (key, i * self.READ_CHUNK_SIZE))
+                    raise ConnectionError('Failed to read key %s: offset %s / total %s' % (key, i * self.READ_CHUNK_SIZE, size))
                 f.write(chunk)
 
         return size
