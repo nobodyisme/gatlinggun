@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.2-24) unstable; urgency=low
+
+  * Separate write to destination cache groups
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Tue, 22 Oct 2013 15:21:54 +0400
+
 elliptics-gatlinggun (0.2-23) unstable; urgency=low
 
   * Read chunk tweaks

@@ -77,14 +77,17 @@ class Gun(object):
 
         # distribute data to destination nodes
         logger.info('Distributing fetched data to groups %s' % to_)
-        self.session.add_groups(to_)
         try:
-            self.write(key, fname, size)
-        except elliptics.Error:
-            # Group is not available (No such device ot address: -6)
-            raise
-        except Exception:
-            raise ConnectionError('Failed to write data for key %s, will be retried' % key)
+            for g in to_:
+                self.session.add_groups([g])
+                logger.info('Writing key %s to group %s' % (key, g))
+                try:
+                    self.write(key, fname, size)
+                except elliptics.Error:
+                    # Group is not available (No such device ot address: -6)
+                    raise
+                except Exception:
+                    raise ConnectionError('Failed to write data for key %s to group %s, will be retried' % (key, g))
         finally:
             try:
                 os.unlink(fname)
