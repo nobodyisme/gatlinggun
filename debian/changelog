@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.2-25) unstable; urgency=low
+
+  * Fix: wait_timeout misprint
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Tue, 22 Oct 2013 17:04:43 +0400
+
 elliptics-gatlinggun (0.2-24) unstable; urgency=low
 
   * Separate write to destination cache groups

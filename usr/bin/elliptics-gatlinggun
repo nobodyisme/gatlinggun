@@ -212,8 +212,8 @@ def run(service, group, enode, zhost, config, log_config):
 
     logger.info('Connection to elliptics node %s:%s' % (ehost, eport))
     c = elliptics.Config()
-    c.wait_timeout = config.getint('elliptics', 'wait_timeout')
-    logger.debug('Node settings: wait_timeout %s' % c.wait_timeout)
+    c.config.wait_timeout = config.getint('elliptics', 'wait_timeout')
+    logger.debug('Node settings: wait_timeout %s' % c.config.wait_timeout)
 
     node = elliptics.Node(elliptics.Logger(config.get('elliptics', 'log'),
                                            config.getint('elliptics', 'log_mask')), c)
