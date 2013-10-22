@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.2-23) unstable; urgency=low
+
+  * Read chunk tweaks
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Tue, 22 Oct 2013 13:12:34 +0400
+
 elliptics-gatlinggun (0.2-22) unstable; urgency=low
 
   * Fix: unlocking item in queue
