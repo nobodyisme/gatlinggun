@@ -8,6 +8,7 @@ import shutil
 import socket
 import signal
 import tempfile
+import time
 
 import elliptics
 
@@ -22,6 +23,7 @@ class Gun(object):
     # write chunk size is set big enough in effort to write all required data
     # in one elliptics.write_data call (should be set minding wait_timeout config setting)
     WRITE_CHUNK_SIZE = 500 * 1024 * 1024
+    ASYNC_SLEEP_TIME = 0.1
 
     WRITE_RETRY_NUM = 5
     READ_RETRY_NUM = 3
@@ -144,7 +146,10 @@ class Gun(object):
             for i in xrange(int(math.ceil(float(size) / self.READ_CHUNK_SIZE))):
                 for retries in xrange(self.READ_RETRY_NUM):
                     try:
-                        chunk = self.session.read_data(eid, i * self.READ_CHUNK_SIZE, self.READ_CHUNK_SIZE)
+                        res = self.session.read_latest_async(eid, i * self.READ_CHUNK_SIZE, self.READ_CHUNK_SIZE)
+                        while not res.ready():
+                            time.sleep(self.ASYNC_SLEEP_TIME)
+                        chunk = res.get()[0].data
                         break
                     except Exception as e:
                         logger.info('Error while reading key %s: type %s, msg: %s' % (key, type(e), e))
