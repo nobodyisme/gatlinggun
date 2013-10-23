@@ -19,7 +19,7 @@ from logger import logger
 
 class Gun(object):
 
-    READ_CHUNK_SIZE = 50 * 1024 * 1024  # 10 Mb
+    READ_CHUNK_SIZE = 100 * 1024 * 1024  # 10 Mb
     # write chunk size is set big enough in effort to write all required data
     # in one elliptics.write_data call (should be set minding wait_timeout config setting)
     WRITE_CHUNK_SIZE = 500 * 1024 * 1024
