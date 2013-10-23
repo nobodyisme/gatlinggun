@@ -66,7 +66,7 @@ class Gun(object):
         logger.info('Fetching data from groups %s' % from_)
         self.session.add_groups(selected_groups)
         try:
-            size = self.read(key, fname)
+            size, timestamp, user_flags = self.read(key, fname)
         except InvalidDataError:
             raise
         except elliptics.Error:
@@ -84,7 +84,7 @@ class Gun(object):
                 self.session.add_groups([g])
                 logger.info('Writing key %s to group %s' % (key, g))
                 try:
-                    self.write(key, fname, size)
+                    self.write(key, fname, size, timestamp, user_flags)
                 except elliptics.Error:
                     # Group is not available (No such device ot address: -6)
                     raise
@@ -142,6 +142,9 @@ class Gun(object):
         except elliptics.NotFoundError:
             raise InvalidDataError('Key %s is not found on source groups' % key)
 
+        timestamp = None
+        user_flags = None
+
         with open(fname, 'wb') as f:
             for i in xrange(int(math.ceil(float(size) / self.READ_CHUNK_SIZE))):
                 for retries in xrange(self.READ_RETRY_NUM):
@@ -150,6 +153,8 @@ class Gun(object):
                         while not res.ready():
                             time.sleep(self.ASYNC_SLEEP_TIME)
                         chunk = res.get()[0].data
+                        if timestamp is None or user_flags is None:
+                            timestamp, user_flags = res.get()[0].timestamp, res.get()[0].user_flags
                         break
                     except Exception as e:
                         logger.info('Error while reading key %s: type %s, msg: %s' % (key, type(e), e))
@@ -157,24 +162,26 @@ class Gun(object):
                     raise ConnectionError('Failed to read key %s: offset %s / total %s' % (key, i * self.READ_CHUNK_SIZE, size))
                 f.write(chunk)
 
-        return size
+        return size, timestamp, user_flags
 
-    def write(self, key, fname, size):
+    def write(self, key, fname, size, timestamp, user_flags):
         eid = elliptics.Id(key)
 
         with open(fname, 'rb') as f:
-            for i in xrange(int(math.ceil(float(size) / self.WRITE_CHUNK_SIZE))):
-                data = f.read(self.WRITE_CHUNK_SIZE)
-                for retries in xrange(self.WRITE_RETRY_NUM):
-                    try:
-                        logger.debug('Writing key %s: len %s, offset %s' % (key, len(data), i * self.WRITE_CHUNK_SIZE))
-                        self.session.write_data(eid, data, i * self.WRITE_CHUNK_SIZE)
-                        break
-                    except Exception as e:
-                        logger.info('Error while writing key %s: type %s, msg: %s' % (key, type(e), e))
-                        pass
-                else:
-                    raise ConnectionError('Failed to write key %s: offset %s / total %s' % (key, i * self.WRITE_CHUNK_SIZE, size))
+            data = f.read(size)
+            for retries in xrange(self.WRITE_RETRY_NUM):
+                try:
+                    logger.debug('Writing key %s: len %s' % (key, len(data)))
+                    res = self.session.write_data_async((eid, timestamp, user_flags), data)
+                    while not res.ready():
+                        time.sleep(self.ASYNC_SLEEP_TIME)
+                    res.get()
+                    break
+                except Exception as e:
+                    logger.info('Error while writing key %s: type %s, msg: %s' % (key, type(e), e))
+                    pass
+            else:
+                raise ConnectionError('Failed to write key %s: len %s' % (key, len(data)))
 
     def remove(self, key):
         eid = elliptics.Id(key)
