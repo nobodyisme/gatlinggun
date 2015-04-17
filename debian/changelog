@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.2-30) unstable; urgency=low
+
+  * Build files and example config updated
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Fri, 17 Apr 2015 17:54:41 +0300
+
 elliptics-gatlinggun (0.2-29) unstable; urgency=low
 
   * Read chunk tweaks
