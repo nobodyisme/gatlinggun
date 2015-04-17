@@ -10,12 +10,12 @@ XS-Python-Version: >= 2.6
 
 Package: elliptics-gatlinggun
 Architecture: amd64
-Depends: ${shlibs:Depends}, ${misc:Depends}, python-kazoo, cocaine-framework-python (>= 0.10.6.19)
+Depends: ${shlibs:Depends}, ${misc:Depends}, python-kazoo, cocaine-framework-python (>= 0.11)
 XB-Python-Version: >= 2.6
 Description: Keys dispatcher python library for elliptics storage
 
 Package: elliptics-gatlinggun-utils
 Architecture: amd64
-Depends: ${shlibs:Depends}, ${misc:Depends}, elliptics-gatlinggun, python-opster, cocaine-framework-python (>= 0.10.6.19), python-msgpack | msgpack-python
+Depends: ${shlibs:Depends}, ${misc:Depends}, elliptics-gatlinggun, python-opster, cocaine-framework-python (>= 0.11), python-msgpack | msgpack-python
 XB-Python-Version: >= 2.6
 Description: Keys dispatcher executable for elliptics storage
