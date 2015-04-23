@@ -68,8 +68,9 @@ def run(config, log_config):
     logging_config = JsonConfig(log_config)
     setup_logger(logging_config['logging'])
 
-    p = Process(target=monitor_app, args=(config,))
-    p.start()
+    if config.has_option('global', 'monitor_port'):
+        p = Process(target=monitor_app, args=(config,))
+        p.start()
 
     node = h.make_elliptics_node(config)
 
