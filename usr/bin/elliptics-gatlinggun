@@ -1,161 +1,53 @@
 #!/usr/bin/env python
 from ConfigParser import ConfigParser
 import copy
-import json
 import logging
+from multiprocessing import Process
 import os.path
 import sys
 import time
 
 import msgpack
 from opster import command
+import tornado
+from tornado import web
 
 import elliptics
-from cocaine.services import Service
 from gatlinggun.config import JsonConfig
 from gatlinggun import daemon
 from gatlinggun.errors import ConnectionError, InvalidDataError, EmptyQueue
 from gatlinggun.gun import Gun
-from gatlinggun import inventory
-from gatlinggun.logger import logger
+from gatlinggun import helpers as h
+from gatlinggun.logger import logger, setup_logger
+from gatlinggun.mastermind_client import ReconnectableService
+from gatlinggun import monitor
 from gatlinggun import sync
 from gatlinggun.transport import ZkTransport as Transport
 
 
-DEFAULT_CONFIG_PATH = '/etc/elliptics/gatlinggun/gatlinggun-default.conf'
-CONFIG_PATH = '/etc/elliptics/gatlinggun/gatlinggun.conf'
-
 DEFAULT_LOGGING_CONFIG_PATH = '/etc/elliptics/gatlinggun/logging-default.conf'
 LOGGING_CONFIG_PATH = '/etc/elliptics/gatlinggun/logging.conf'
-
-DEFAULT_ELLIPTICS_CONFIG_PATH = '/etc/elliptics/elliptics-default.conf'
-ELLIPTICS_CONFIG_PATH = '/etc/elliptics/elliptics.conf'
-
-GROUP_ID_PATH = '/etc/elliptics/gatlinggun/group.id'
 
 DEFAULT_PIDFILE = '/var/run/elliptics-gatlinggun/gatlinggun'
 
 
-def import_object(object_name):
-    module_path = object_name.split('.')
-    import_path = module_path[0]
-    module = __import__(import_path)
-
-    obj_ = module
-    for part in module_path[1:]:
-        obj_ = getattr(obj_, part)
-    return obj_
-
-
-def setup_logger(log_config):
-
-    formatters = {}
-    for formatter, settings in log_config['formatters'].iteritems():
-        settings_ = copy.copy(settings)
-        class_ = import_object(settings_.pop('class'))
-        formatters[formatter] = class_(**settings_)
-
-    handlers = {}
-    for handler, settings in log_config['handlers'].iteritems():
-        settings_ = copy.copy(settings)
-        class_ = import_object(settings_.pop('class'))
-        level_ = getattr(logging, settings_.pop('level', 'NOTSET'))
-        formatter_ = settings_.pop('formatter', 'default')
-        handler_obj = class_(**settings_)
-        handler_obj.setLevel(level_)
-        handler_obj.setFormatter(formatters[formatter_])
-        handlers[handler] = handler_obj
-
-    for logger, settings in log_config['loggers'].iteritems():
-        logger = logging.getLogger(logger)
-        logger.setLevel(getattr(logging, settings.get('level', 'NOTSET')))
-        logger.propagate = settings.get('propagate', True)
-        for handler in settings['handler']:
-            logger.addHandler(handlers[handler])
-
-
-def parse_address(s, default_port=None):
-    parts = s.split(':', 1)
-    try:
-        host, port = parts[0], len(parts) == 2 and int(parts[1]) or default_port
-    except (TypeError, ValueError):
-        raise ValueError('Bad host address: %s' % s)
-    return host, port
-
-
-def get_group_from_mastermind(service):
-    while True:
-        try:
-            res = service.enqueue('get_next_group_number', msgpack.packb(1)).get()
-            yield res
-        except Exception as e:
-            raise StopIteration()
-
-
-def _prepare(service, config=None, group=None):
-
-    root_dir = config.get('elliptics', 'root_dir')
-
-    if group:
-        groups = iter([int(group)])
-    else:
-        groups = get_group_from_mastermind(service)
-
-    try:
-        for l in ['cache']:
-            if not os.path.isdir(os.path.join(root_dir, l)):
-                continue
-
-            group_id_dir = os.path.join(root_dir, l, 'kdb')
-            if not os.path.isdir(group_id_dir):
-                os.mkdir(group_id_dir)
-
-            group_id_file = os.path.join(group_id_dir, 'group.id')
-            if os.path.exists(group_id_file):
-                continue
-
-            g = groups.next()[0]
-            print "Writing group_id = %d into file %s" % (g, group_id_file)
-
-            with open(group_id_file, 'w') as group_id:
-                group_id.write(str(g))
-
-    except StopIteration:
-        pass
-
-
-@command(usage='-g GROUP -e ELLIPTICS-NODE -z ZOOKEEPER-HOST'
-               '-m MASTERMIND_HOST -l LOGGING_CONFIG'
-               '[--daemonize] [--pidfile PIDFILE] [--user USER] [--prepare]')
-def main(group=('g', '', 'Group id of node where daemon is being run'),
-         enode=('e', '', 'Elliptics node which daemon will use for cache distribution'),
-         zhost=('z', '', 'Zookeper queue for cache tasks fetching'),
-         mastermind_host=('m', '', 'Mastermind cloud host'),
-         config=('c', '', 'Application config file'),
+@command(usage='-c CONFIG -l LOGGING_CONFIG'
+               '[--daemonize] [--pidfile PIDFILE] [--user USER]')
+def main(config=('c', '', 'Application config file'),
          log_config=('l', '', 'Application logging config file'),
          daemonize=('', False, 'Daemonize this process'),
          pidfile=('', None, 'Use this pidfile'),
-         user=('', None, ''),
-         prepare=('', None, 'Prepare elliptics cache instance mount directory and exit')):
+         user=('', None, '')):
     """This script starts gatling gun daemon that
     distributes keys to designated cache nodes"""
 
-    # if not enode or not zhost or not group:
-    #     main.help()
-    #     sys.exit(1)
+    main_config = ConfigParser()
 
-    main_config = ConfigParser({'sync_keys_period': '300',
-                                'wait_timeout': '5'})
+    if not config:
+        raise RuntimeError('Application config is required (-c|--config)')
 
-    use_config = DEFAULT_CONFIG_PATH
-    if config:
-        use_config = config
-    elif os.path.exists(CONFIG_PATH):
-        use_config = CONFIG_PATH
-
-    if not main_config.read(use_config):
-        sys.stderr.write('Failed to open config file: %s\n' % use_config)
-        exit(1)
+    if not main_config.read(config):
+        raise RuntimeError('Failed to open config file: {0}'.format(config))
 
     use_log_config = DEFAULT_LOGGING_CONFIG_PATH
     if log_config:
@@ -163,73 +55,44 @@ def main(group=('g', '', 'Group id of node where daemon is being run'),
     elif os.path.exists(LOGGING_CONFIG_PATH):
         use_log_config = LOGGING_CONFIG_PATH
 
-    mastermind_host = mastermind_host or main_config.get('mastermind', 'host')
-
-    mastermind_hosts = mastermind_host.split(',')
-    mastermind = None
-    for host in mastermind_hosts:
-        try:
-            mastermind = Service('mastermind', host=host)
-            break
-        except Exception as e:
-            pass
-    else:
-        sys.stderr.write('Failed to connect to mastermind host: %s\n' % mastermind_host)
-        exit(1)
-
-    if prepare:
-        _prepare(mastermind, config=main_config, group=group)
-        return
-
-    enode = enode or main_config.get('elliptics', 'host')
-    zhost = zhost or main_config.get('zookeeper', 'host')
-    user = user or main_config.get('global', 'user')
-
-    group = ((group and int(group)) or
-             (os.path.exists(GROUP_ID_PATH) and int(open(GROUP_ID_PATH).read())) or
-             main_config.getint('global', 'group'))
-
-    if not group:
-        sys.stderr.write('Valid group id is required, current id is %s\n' % group)
-        exit(1)
-
     if daemonize:
+        user = user or main_config.get('global', 'user')
         d = daemon.Daemon(pidfile or DEFAULT_PIDFILE, user)
         d.run = run
-        d.start(mastermind, group, enode, zhost, main_config, use_log_config)
+        d.start(main_config, use_log_config)
     else:
-        run(mastermind, group, enode, zhost, main_config, use_log_config)
+        run(main_config, use_log_config)
 
 
-def run(service, group, enode, zhost, config, log_config):
-    parts = enode.split(':', 1)
-    ehost, eport = parse_address(enode)
-
+def run(config, log_config):
     logging_config = JsonConfig(log_config)
     setup_logger(logging_config['logging'])
 
-    logger.info('Group %d' % group)
+    p = Process(target=monitor_app, args=(config,))
+    p.start()
 
-    logger.info('Connection to elliptics node %s:%s' % (ehost, eport))
-    c = elliptics.Config()
-    c.config.wait_timeout = config.getint('elliptics', 'wait_timeout')
-    logger.debug('Node settings: wait_timeout %s' % c.config.wait_timeout)
+    node = h.make_elliptics_node(config)
 
-    node = elliptics.Node(elliptics.Logger(config.get('elliptics', 'log'),
-                                           config.getint('elliptics', 'log_mask')), c)
-    node.add_remote(ehost, eport)
+    gun = Gun(node, config.get('elliptics', 'cache_path_prefix'))
+    zk_addresses = config.get('zookeeper', 'addresses')
+    logger.info('Connection to transport hosts %s' % zk_addresses)
+    if isinstance(zk_addresses, unicode):
+        zk_addresses = zk_addresses.encode('utf-8')
+    transport = Transport(gun.local_cache_groups,
+        config.get('zookeeper', 'task_path'),
+        host=zk_addresses, timeout=3)
 
-    inventory.init_inventory(config)
+    sync.PeriodThread(gun.update_local_cache_groups,
+                      config.getint('global', 'sync_keys_period')
+                      if config.has_option('global', 'sync_keys_period') else
+                      10
+    ).start()
 
-    gun = Gun(node, service)
-    logger.info('Connection to transport node %s' % zhost)
-    if isinstance(zhost, unicode):
-        zhost = zhost.encode('utf-8')
-    transport = Transport(host=zhost, group=group, timeout=3)
-
-    synchronizer = sync.Synchronizer(node, group, transport, service)
-    pth = sync.PeriodThread(synchronizer.sync_keys,
-                            config.getint('global', 'sync_keys_period')).start()
+    mastermind = ReconnectableService(config.get('mastermind', 'app'),
+        config.get('mastermind', 'addresses'))
+    # synchronizer = sync.Synchronizer(node, group, transport, service)
+    # pth = sync.PeriodThread(synchronizer.sync_keys,
+    #                         config.getint('global', 'sync_keys_period')).start()
 
     logger.info('Starting task processing')
 
@@ -240,7 +103,7 @@ def run(service, group, enode, zhost, config, log_config):
             with transport.item() as item:
                 if not item:
                     raise EmptyQueue('No item fetched')
-                task = json.loads(item)
+                task = msgpack.unpackb(item)
 
                 logger.info('Task %s fetched' % task['key'])
                 logger.debug('Task %s: %s' % (task['key'], task))

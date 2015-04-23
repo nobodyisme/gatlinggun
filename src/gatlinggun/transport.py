@@ -1,9 +1,9 @@
 from contextlib import contextmanager
-import json
 from time import sleep
 
 from kazoo.client import KazooClient
 from kazoo.exceptions import SessionExpiredError
+import msgpack
 
 from queue import FilteredLockingQueue
 from errors import ConnectionError, InvalidDataError
@@ -14,18 +14,18 @@ class ZkTransport(object):
     CONSUME_RETRIES = 2
     SESSION_RESTORE_PAUSE = 0.5
 
-    def __init__(self, host='127.0.0.1:2181', group=0, timeout=10, interval=2):
-        self.group = group
+    def __init__(self, groups, path, host='127.0.0.1:2181', timeout=10, interval=2):
+        self.groups = groups
         self.client = KazooClient(host)
         self.client.start()
-        self.q = FilteredLockingQueue(self.client, '/cache', self.__filter)
+        self.q = FilteredLockingQueue(self.client, path, self.__filter)
         self.timeout = timeout
         self.interval = interval
 
     def __filter(self, data):
         try:
-            d = json.loads(data)
-            if self.group in d['dgroups']:
+            d = msgpack.unpackb(data)
+            if d['group'] in self.groups:
                 return True
         except:
             pass
@@ -34,9 +34,12 @@ class ZkTransport(object):
     @contextmanager
     def item(self):
         try:
-            task = self.q.get(self.timeout)
-            yield task
-            self.retry(self.q.consume, self.CONSUME_RETRIES)
+            if self.groups:
+                task = self.q.get(self.timeout)
+                yield task
+                self.retry(self.q.consume, self.CONSUME_RETRIES)
+            else:
+                yield
         except ConnectionError:
             # in case of connection error we should retry the task execution
             raise
