@@ -249,7 +249,6 @@ def run(service, group, enode, zhost, config, log_config):
 
         except ConnectionError as e:
             logger.exception(e)
-            time.sleep(1)
 
         except InvalidDataError as e:
             logger.error(e)
@@ -261,8 +260,17 @@ def run(service, group, enode, zhost, config, log_config):
             logger.exception(e)
             # the last key was unlocked, we are sleeping for that matter cause
             # we are hoping that some other daemon will fetch it and do better
+        finally:
             time.sleep(1)
-            pass
+
+
+def monitor_app(config):
+    mon = monitor.Monitor(config)
+    application = web.Application([
+        (r"/stats/", monitor.MonitorHandler, {'monitor': mon})
+    ])
+    application.listen(config.get('global', 'monitor_port'))
+    tornado.ioloop.IOLoop.instance().start()
 
 
 if __name__ == '__main__':

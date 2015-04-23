@@ -6,8 +6,7 @@ setup(
     url="https://github.com/nobodyisme/gatlinggun",
     author="Andrey Vasilenkov",
     author_email="indigo@yandex-team.ru",
-    packages=['gatlinggun',
-              'gatlinggun.inventory'],
+    packages=['gatlinggun'],
     package_dir={'gatlinggun': 'src/gatlinggun'},
     license="LGPLv3+",
     scripts=[]
