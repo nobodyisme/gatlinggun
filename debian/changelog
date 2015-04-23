@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.4) unstable; urgency=low
+
+  * Do not run monitor if no monitor port is defined
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Thu, 23 Apr 2015 20:12:36 +0300
+
 elliptics-gatlinggun (0.3) unstable; urgency=low
 
   * Updated elliptics API usage
