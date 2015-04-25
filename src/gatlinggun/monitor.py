@@ -51,9 +51,6 @@ class Monitor(object):
     @gen.coroutine
     def handler(self):
 
-        import time
-        from tornado.ioloop import IOLoop
-
         res = {
             'records_total': 0,
             'records_removed': 0,
@@ -75,7 +72,6 @@ class Monitor(object):
                 categories=elliptics.monitor_stat_categories.backend)
             async_result.connect(cb)
             result = yield f
-            yield gen.Task(IOLoop.instance().add_timeout, time.time() + 5)
 
             stat = result.statistics
 

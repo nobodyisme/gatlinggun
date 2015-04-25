@@ -132,7 +132,7 @@ def monitor_app(config):
     mon = monitor.Monitor(config)
     application = web.Application([
         (r"/stats/", monitor.MonitorHandler, {'monitor': mon})
-    ])
+    ], gzip=True)
     application.listen(config.get('global', 'monitor_port'))
     tornado.ioloop.IOLoop.instance().start()
 
