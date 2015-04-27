@@ -55,13 +55,17 @@ def main(config=('c', '', 'Application config file'),
     elif os.path.exists(LOGGING_CONFIG_PATH):
         use_log_config = LOGGING_CONFIG_PATH
 
-    if daemonize:
-        user = user or main_config.get('global', 'user')
-        d = daemon.Daemon(pidfile or DEFAULT_PIDFILE, user)
-        d.run = run
-        d.start(main_config, use_log_config)
-    else:
-        run(main_config, use_log_config)
+    try:
+        if daemonize:
+            user = user or main_config.get('global', 'user')
+            d = daemon.Daemon(pidfile or DEFAULT_PIDFILE, user)
+            d.run = run
+            d.start(main_config, use_log_config)
+        else:
+            run(main_config, use_log_config)
+    except Exception as e:
+        logger.exception('Main process failed: {0}'.format(e))
+        sys.exit(1)
 
 
 def run(config, log_config):
