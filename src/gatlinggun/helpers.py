@@ -18,6 +18,13 @@ def make_elliptics_node(config):
 
     addresses = []
     for address in config.get('elliptics', 'addresses').split(','):
+        hostname, _ = address.split(':', 1)
+        if not hostname:
+            try:
+                hostname = socket.gethostname()
+                address = hostname + address
+            except Exception as e:
+                raise RuntimeError('Failed to get local hostname: {0}'.format(e))
         try:
             addresses.append(elliptics.Address.from_host_port_family(address))
         except Exception as e:
