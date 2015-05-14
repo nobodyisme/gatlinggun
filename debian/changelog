@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.4.3) unstable; urgency=low
+
+  * Local hostname for elliptics connection if empty hostname in config
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Thu, 14 May 2015 20:23:28 +0300
+
 elliptics-gatlinggun (0.4.2) unstable; urgency=low
 
   * Proper logging of exceptions in the main run function
