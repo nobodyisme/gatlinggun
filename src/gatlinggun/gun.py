@@ -69,6 +69,8 @@ class Gun(object):
                 msre = s.monitor_stat(address,
                     categories=elliptics.monitor_stat_categories.backend).get()[0]
                 for backend in msre.statistics['backends'].itervalues():
+                    if backend['status']['state'] != 1:
+                        continue
                     backend_base_path = backend.get('backend', {}).get('config', {}).get('data', None)
                     if backend_base_path and backend_base_path.startswith(self.cache_path_prefix):
                         new_cache_groups.add(backend['backend']['config']['group'])

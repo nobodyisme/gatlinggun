@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.4.4) unstable; urgency=low
+
+  * Added backend status checking when searching for local groups
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Fri, 15 May 2015 12:33:12 +0300
+
 elliptics-gatlinggun (0.4.3) unstable; urgency=low
 
   * Local hostname for elliptics connection if empty hostname in config
