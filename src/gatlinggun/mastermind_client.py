@@ -7,6 +7,9 @@ except ImportError:
     from cocaine.asio.exceptions import DisconnectionError
 
 
+COCAINE_DEFAULT_PORT = 10053
+
+
 class ReconnectableService(object):
     def __init__(self, app_name, mm_addresses):
         self.app_name = app_name
@@ -14,7 +17,7 @@ class ReconnectableService(object):
         for address in mm_addresses.split(','):
             address_parts = address.split(':')
             host = address_parts[0]
-            port = len(address_parts) > 1 and address_parts[1] or None
+            port = len(address_parts) > 1 and address_parts[1] or COCAINE_DEFAULT_PORT
             addresses.append((host, port))
         self.addresses = itertools.cycle(addresses)
         self.host = host
