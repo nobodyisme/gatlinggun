@@ -101,12 +101,12 @@ class Gun(object):
     def distribute(self, key, from_groups=None, to_groups=None):
         if not from_groups or not to_groups:
             raise InvalidDataError('Groups are not properly defined for key "{0}"'.format(key))
-        logger.info('Distributing key %s for groups %s' % (key, to_groups))
+        logger.info('Distributing key {} to groups {} from '
+                    'groups {}'.format(key, to_groups, from_groups))
 
         fname = os.path.join(self.tmpdir, key)
 
         # fetch data from source group
-        logger.info('Fetching data from groups %s' % from_groups)
         try:
             size, timestamp, user_flags = self.read(from_groups, key, fname)
         except InvalidDataError:
