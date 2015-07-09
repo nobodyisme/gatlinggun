@@ -141,6 +141,8 @@ class Gun(object):
         eid = elliptics.Id(key)
 
         session = self.session.clone()
+        session.ioflags &= ~elliptics.io_flags.nocsum
+        session.cflags |= elliptics.command_flags.nolock
         logger.info('Groups: {0}'.format(groups))
         session.add_groups(groups)
         try:
@@ -152,12 +154,14 @@ class Gun(object):
         timestamp = lookup.timestamp
         user_flags = lookup.user_flags
 
+        session = session.clone()
+        session.ioflags |= elliptics.io_flags.nocsum
         last_exc = None
         with open(fname, 'wb') as f:
             for i in xrange(int(math.ceil(float(size) / self.READ_CHUNK_SIZE))):
                 for retries in xrange(self.READ_RETRY_NUM):
                     try:
-                        res = session.read_latest(
+                        res = session.read_data(
                             eid, i * self.READ_CHUNK_SIZE, self.READ_CHUNK_SIZE).get()
                         chunk = res[0].data
                         break
