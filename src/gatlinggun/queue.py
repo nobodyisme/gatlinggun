@@ -1,11 +1,14 @@
-import os.path
+"""
+Zookeeper based queue implementations.
+"""
 import uuid
+from kazoo.exceptions import NoNodeError, NodeExistsError, SessionExpiredError
+from kazoo.retry import ForceRetryError
+from kazoo.protocol.states import EventType
+from kazoo.recipe.queue import BaseQueue
 
-from kazoo.exceptions import NoNodeError, NodeExistsError, KazooException
-from kazoo.retry import RetryFailedError
 
-
-class LockingQueue(object):
+class FilteredLockingQueue(BaseQueue):
     """A distributed queue with priority and locking support.
 
     Upon retrieving an entry from the queue, the entry gets locked with an
@@ -30,40 +33,26 @@ class LockingQueue(object):
     entries = "/entries"
     entry = "entry"
 
-    def __init__(self, client, path, group_id):
+    def __init__(self, client, path, filter_func):
         """
         :param client: A :class:`~kazoo.client.KazooClient` instance.
-        :param path: The queue path prefix to use in ZooKeeper.
-        :param group_id: Local group id, will be added to path to filter
-          the tasks assigned to local elliptics group
+        :param path: The queue path to use in ZooKeeper.
         """
-        self.client = client
-        self.path = os.path.join(path, str(group_id))
+        super(FilteredLockingQueue, self).__init__(client, path)
         self.id = uuid.uuid4().hex.encode()
-        self._lock_path = os.path.normpath(self.path) + self.lock
-        self._entries_path = os.path.normpath(self.path) + self.entries
+        self.processing_element = None
+        self._lock_path = self.path + self.lock
+        self._entries_path = self.path + self.entries
         self.structure_paths = (self._lock_path, self._entries_path)
-        self.ensured_path = False
-
-    def _check_put_arguments(self, value, priority=100):
-        if not isinstance(value, bytes):
-            raise TypeError("value must be a byte string")
-        if not isinstance(priority, int):
-            raise TypeError("priority must be an int")
-        elif priority < 0 or priority > 999:
-            raise ValueError("priority must be between 0 and 999")
-
-    def _ensure_paths(self):
-        if not self.ensured_path:
-            # make sure our parent / internal structure nodes exists
-            for path in self.structure_paths:
-                self.client.ensure_path(path)
-            self.ensured_path = True
+        self.filter_func = filter_func
+        self.items_cache = {}
 
     def __len__(self):
-        self._ensure_paths()
-        _, stat = self.client.retry(self.client.get, self._entries_path)
-        return stat.children_count
+        """Returns the current length of the queue.
+
+        :returns: queue size (includes locked entries count).
+        """
+        return super(FilteredLockingQueue, self).__len__()
 
     def put(self, value, priority=100):
         """Put an entry into the queue.
@@ -84,88 +73,21 @@ class LockingQueue(object):
                 priority=priority),
             value, sequence=True)
 
-    def __iter__(self):
+    def get(self, timeout=None):
+        """Locks and gets an entry from the queue. If a previously got entry
+        was not consumed, this method will return that entry.
+
+        :param timeout:
+            Maximum waiting time in seconds. If None then it will wait
+            untill an entry appears in the queue.
+        :returns: A locked entry value or None if the timeout was reached.
+        :rtype: bytes
+        """
         self._ensure_paths()
-        items = self.client.retry(self.client.get_children, self._entries_path)
-        for item in items:
-            try:
-                with LockedItem(self.client,
-                                self._entries_path, self._lock_path,
-                                item, self.id) as locked_item:
-                    yield locked_item
-            except KazooException:
-                continue
-
-
-class LockError(KazooException):
-    pass
-
-
-class LockedItem(object):
-
-    def __init__(self, client, entries_path, lock_path, entry_id, lock_id):
-        self._client = client
-        self._entries_path = entries_path
-        self._lock_path = lock_path
-        self.entry_id = entry_id
-        self.lock_id = lock_id
-        self.data = None
-
-    def __enter__(self):
-        self.acquire()
-        return self
-
-    def acquire(self):
-        """Acquires the lock for the given entry.
-
-        :returns: True if a lock was acquired succesfully, otherwise raises
-          some kind of KazooException.
-        :rtype: bool
-        """
-        try:
-            self._client.retry(
-                self._client.create,
-                '{path}/{id}'.format(path=self._lock_path,
-                                     id=self.entry_id),
-                self.lock_id,
-                ephemeral=True)
-        except (NodeExistsError, RetryFailedError):
-            if not self.holds_lock():
-                raise LockError
-
-        try:
-            value, stat = self._client.retry(
-                self._client.get,
-                '{path}/{id}'.format(path=self._entries_path, id=self.entry_id))
-        except (NoNodeError, RetryFailedError):
-            if self.holds_lock():
-                self._client.retry(self._inner_release)
-
-        self.data = value
-        return True
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.release()
-
-    def release(self):
-        """Releases previously acquired lock for the given entry.
-
-        :returns: True if a lock was released succesfully, False in case of a
-          non-retryable error or if entry is already locked by someone else.
-        :rtype: bool
-        """
-        try:
-            self._client.retry(self._inner_release)
-        except LockError:
-            return False
-        return True
-
-    def _inner_release(self):
-        if not self.holds_lock():
-            raise LockError
-        self._client.delete('{path}/{id}'.format(
-            path=self._lock_path,
-            id=self.entry_id))
+        if not self.processing_element is None:
+            return self.processing_element[1]
+        else:
+            return self._inner_get(timeout)
 
     def holds_lock(self):
         """Checks if a node still holds the lock.
@@ -173,26 +95,154 @@ class LockedItem(object):
         :returns: True if a node still holds the lock, False otherwise.
         :rtype: bool
         """
-        lock_path = '{path}/{id}'.format(path=self._lock_path, id=self.entry_id)
-        try:
-            self._client.retry(self._client.sync, lock_path)
-            value, stat = self._client.retry(self._client.get, lock_path)
-        except NoNodeError:
-            # node has already been removed, probably after session expiration
+        if self.processing_element is None:
             return False
-        return value == self.lock_id
+        lock_id, _ = self.processing_element
+        lock_path = "{path}/{id}".format(path=self._lock_path, id=lock_id)
+        try:
+            self.client.sync(lock_path)
+            value, stat = self.client.retry(self.client.get, lock_path)
+        except (NoNodeError, SessionExpiredError):
+            # node has already been removed, probably after session expiration
+            self.processing_element = None
+            raise
+        return value == self.id
 
     def consume(self):
-        """Removes locked item entry from the queue.
+        """Removes a currently processing entry from the queue.
 
-        :returns: None
+        :returns: True if element was removed successfully, False otherwise.
         :rtype: bool
         """
-        self._client.retry(self._inner_consume)
+        if not self.processing_element is None and self.holds_lock():
+            id_, value = self.processing_element
+            self.client.retry(self.client.delete,
+                "{path}/{id}".format(
+                    path=self._entries_path,
+                    id=id_))
 
-    def _inner_consume(self):
-        if not self.holds_lock():
-            raise LockError
-        self._client.delete('{path}/{id}'.format(
-            path=self._entries_path,
-            id=self.entry_id))
+            self.client.retry(self.client.delete,
+                "{path}/{id}".format(
+                    path=self._lock_path,
+                    id=id_))
+
+            self.processing_element = None
+            return True
+        else:
+            return False
+
+    def unlock(self):
+        """Unlocks a currently processing entry.
+
+        :returns: True if element was unlocked successfully, False otherwise.
+        :rtype: bool
+        """
+        if not self.processing_element is None and self.holds_lock():
+            id_, value = self.processing_element
+
+            self.client.retry(self.client.delete,
+                "{path}/{id}".format(
+                    path=self._lock_path,
+                    id=id_))
+
+            self.processing_element = None
+            return True
+        else:
+            # either processing_element is None or node is already locked by someone else
+            self.processing_element = None
+            return False
+
+    def list(self, func=None):
+        """Returns list of all entries.
+        If func parameter is supplied, it is applied to each result entry
+        (via map function).
+
+        :returns: List of all entries in the queue.
+        :rtype: list
+        """
+        items = [self._get_data_cached(item)[0] for item in self.client.retry(self.client.get_children, self._entries_path)]
+        if func:
+            return map(func, items)
+        return items
+
+    def _inner_get(self, timeout):
+        flag = self.client.handler.event_object()
+        lock = self.client.handler.lock_object()
+        canceled = False
+        value = []
+
+        def check_for_updates(event):
+            if not event is None and event.type != EventType.CHILD:
+                return
+            with lock:
+                if canceled or flag.isSet():
+                    return
+                items = self.client.retry(self.client.get_children,
+                    self._entries_path,
+                    check_for_updates)
+
+                taken = self.client.retry(self.client.get_children,
+                    self._lock_path,
+                    check_for_updates)
+
+                available = self._filter_locked(items, taken)
+
+                items_to_take = []
+                for item in available:
+                    try:
+                        data = self._get_data_cached(item)
+                        if self.filter_func(data[0]):
+                            items_to_take.append(item)
+                    except:
+                        pass
+
+                if len(items_to_take) > 0:
+                    ret = self._take(items_to_take[0])
+                    if not ret is None:
+                        # By this time, no one took the task
+                        value.append(ret)
+                        flag.set()
+
+        check_for_updates(None)
+        retVal = None
+        flag.wait(timeout)
+        with lock:
+            canceled = True
+            if len(value) > 0:
+                # We successfully locked an entry
+                self.processing_element = value[0]
+                retVal = value[0][1]
+        return retVal
+
+    def _get_data_cached(self, item):
+        if item in self.items_cache:
+            return self.items_cache[item]
+
+        data = self.client.retry(self.client.get,
+            "{path}/{id}".format(
+                path=self._entries_path,
+                id=item))
+
+        self.items_cache[item] = data
+        return data
+
+    def _filter_locked(self, values, taken):
+        taken = set(taken)
+        available = sorted(values)
+        return (available if len(taken) == 0 else
+            [x for x in available if x not in taken])
+
+    def _take(self, id_):
+        try:
+            self.client.create(
+                "{path}/{id}".format(
+                    path=self._lock_path,
+                    id=id_),
+                self.id,
+                ephemeral=True)
+            value, stat = self.client.retry(self.client.get,
+                "{path}/{id}".format(path=self._entries_path, id=id_))
+        except (NoNodeError, NodeExistsError):
+            # Item is already consumed or locked
+            return None
+        return (id_, value)
