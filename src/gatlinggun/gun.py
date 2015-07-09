@@ -1,15 +1,11 @@
 import atexit
-import itertools
 import math
-import msgpack
 import os
 import os.path
 import shutil
 import socket
 import signal
 import tempfile
-import threading
-import time
 import traceback
 
 import elliptics
