@@ -1,7 +1,5 @@
 import atexit
-import itertools
 import math
-import msgpack
 import os
 import os.path
 import shutil
@@ -29,9 +27,11 @@ class Gun(object):
     DISTRUBUTE_TASK_ACTION = 'add'
     REMOVE_TASK_ACTION = 'remove'
 
-    def __init__(self, node, cache_path_prefix, tmpdir):
+    def __init__(self, node, cache_path_prefix, tmp_dir):
         self.session = elliptics.Session(node)
-        self.tmpdir = tmpdir
+        self.tmp_dir = tmp_dir
+        if not os.path.exists(self.tmp_dir):
+            os.makedirs(self.tmp_dir)
         try:
             self.hostname = socket.gethostname()
         except Exception as e:
@@ -42,7 +42,6 @@ class Gun(object):
         self.cache_path_prefix = cache_path_prefix
         self.update_local_cache_groups()
 
-        atexit.register(self.clean)
         signal.signal(signal.SIGTERM, lambda signum, stack_frame: exit(1))
 
     @property
@@ -101,7 +100,7 @@ class Gun(object):
         logger.info('Distributing key {} to groups {} from '
                     'groups {}'.format(key, to_groups, from_groups))
 
-        fname = os.path.join(self.tmpdir, key)
+        fname = os.path.join(self.tmp_dir, key)
 
         try:
             # fetch data from source group
@@ -231,12 +230,3 @@ class Gun(object):
         except Exception as e:
             logger.error('Key {0}: failed to remove from group {1}: {2}'.format(key, from_groups, e))
             raise ConnectionError('Failed to remove key %s: %s' % (key, e))
-
-    def clean(self):
-        try:
-            shutil.rmtree(self.tmpdir)
-        except Exception:
-            pass
-
-    def __del__(self):
-        self.clean()
