@@ -76,7 +76,10 @@ def run(config, log_config):
 
     node = h.make_elliptics_node(config)
 
-    gun = Gun(node, config.get('elliptics', 'cache_path_prefix'))
+    gun = Gun(
+        node,
+        config.get('elliptics', 'cache_path_prefix'),
+        config.get('global', 'tmp_dir'))
     zk_addresses = config.get('zookeeper', 'addresses')
     logger.info('Connection to transport hosts %s' % zk_addresses)
     if isinstance(zk_addresses, unicode):

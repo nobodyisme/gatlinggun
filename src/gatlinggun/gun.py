@@ -5,7 +5,6 @@ import os.path
 import shutil
 import socket
 import signal
-import tempfile
 import traceback
 
 import elliptics
@@ -20,7 +19,7 @@ class Gun(object):
     READ_CHUNK_SIZE = 500 * 1024 * 1024  # 500 Mb
     # write chunk size is set big enough in effort to write all required data
     # in one elliptics.write_data call (should be set minding wait_timeout config setting)
-    WRITE_CHUNK_SIZE = 500 * 1024 * 1024
+    WRITE_CHUNK_SIZE = 50 * 1024 * 1024
 
     WRITE_RETRY_NUM = 5
     READ_RETRY_NUM = 3
@@ -28,9 +27,9 @@ class Gun(object):
     DISTRUBUTE_TASK_ACTION = 'add'
     REMOVE_TASK_ACTION = 'remove'
 
-    def __init__(self, node, cache_path_prefix):
+    def __init__(self, node, cache_path_prefix, tmpdir):
         self.session = elliptics.Session(node)
-        self.tmpdir = tempfile.mkdtemp(prefix='gatlinggun')
+        self.tmpdir = tmpdir
         try:
             self.hostname = socket.gethostname()
         except Exception as e:
@@ -102,20 +101,21 @@ class Gun(object):
 
         fname = os.path.join(self.tmpdir, key)
 
-        # fetch data from source group
         try:
-            size, timestamp, user_flags = self.read(from_groups, key, fname)
-        except InvalidDataError:
-            raise
-        except Exception as e:
-            raise ConnectionError('Failed to read data for key %s, will be retried (%s)\n%s' % (
-                key, e, traceback.format_exc()))
+            # fetch data from source group
+            try:
+                size, timestamp, user_flags = self.read(from_groups, key, fname)
+            except InvalidDataError:
+                raise
+            except Exception as e:
+                raise ConnectionError('Failed to read data for key %s, will be retried (%s)\n%s' % (
+                    key, e, traceback.format_exc()))
 
-        logger.info('Data read into tmp file: %s' % fname)
+            logger.info('Data read into tmp file: %s' % fname)
 
-        # distribute data to destination nodes
-        logger.info('Distributing fetched data to groups %s' % to_groups)
-        try:
+            # distribute data to destination nodes
+            logger.info('Distributing fetched data to groups %s' % to_groups)
+
             for g in to_groups:
                 logger.info('Writing key %s to group %s' % (key, g))
                 try:
