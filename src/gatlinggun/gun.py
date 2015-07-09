@@ -187,19 +187,22 @@ class Gun(object):
 
         last_exc = None
         with open(fname, 'rb') as f:
-            data = f.read(size)
-            for retries in xrange(self.WRITE_RETRY_NUM):
-                try:
-                    logger.debug('Writing key %s: len %s' % (key, len(data)))
-                    res = session.write_data(eid, data).get()
-                    break
-                except Exception as e:
-                    logger.info('Error while writing key %s: type %s, msg: %s' % (key, type(e), e))
-                    pass
-            else:
-                err = 'Failed to write key %s, len %s, last exc: %s' % (
-                    key, len(data), last_exc)
-                raise ConnectionError(err)
+            session.write_prepare(eid, '', 0, size).get()
+            for i in xrange(int(math.ceil(float(size) / self.WRITE_CHUNK_SIZE))):
+                data = f.read(self.WRITE_CHUNK_SIZE)
+                for retries in xrange(self.WRITE_RETRY_NUM):
+                    try:
+                        logger.debug('Writing key %s: len %s' % (key, len(data)))
+                        res = session.write_plain(eid, data, i * self.WRITE_CHUNK_SIZE).get()
+                        break
+                    except Exception as e:
+                        logger.info('Error while writing key %s: type %s, msg: %s' % (key, type(e), e))
+                        pass
+                else:
+                    err = 'Failed to write key %s, len %s, last exc: %s' % (
+                        key, len(data), last_exc)
+                    raise ConnectionError(err)
+            session.write_commit(eid, '', 0, size).get()
 
         logger.info('Key {0} successfully written to group {1}'.format(key, groups))
 
