@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.4.15) trusty; urgency=medium
+
+  * Configurable read and write chunk sizes
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Fri, 10 Jul 2015 17:59:49 +0300
+
 elliptics-gatlinggun (0.4.14) unstable; urgency=low
 
   * Tolerate item consuming errors on data invalid errors
