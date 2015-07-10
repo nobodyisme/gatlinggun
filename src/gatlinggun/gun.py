@@ -1,8 +1,6 @@
-import atexit
 import math
 import os
 import os.path
-import shutil
 import socket
 import signal
 import traceback
@@ -191,11 +189,15 @@ class Gun(object):
                 data = f.read(self.WRITE_CHUNK_SIZE)
                 for retries in xrange(self.WRITE_RETRY_NUM):
                     try:
-                        logger.debug('Writing key %s: len %s' % (key, len(data)))
-                        res = session.write_plain(eid, data, i * self.WRITE_CHUNK_SIZE).get()
+                        offset = i * self.WRITE_CHUNK_SIZE
+                        logger.debug('Writing key %s: offset %s, size %s, ' % (
+                            key, offset, len(data)))
+                        res = session.write_plain(eid, data, offset).get()
                         break
                     except Exception as e:
-                        logger.info('Error while writing key %s: type %s, msg: %s' % (key, type(e), e))
+                        logger.info('Error while writing key %s, offset %s: '
+                                    'type %s, msg: %s' % (
+                                        key, offset, type(e), e))
                         pass
                 else:
                     err = 'Failed to write key %s, len %s, last exc: %s' % (
