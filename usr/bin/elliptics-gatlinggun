@@ -126,7 +126,11 @@ def run(config, log_config):
 
             except InvalidDataError as e:
                 logger.error(e)
-                item.consume()
+                try:
+                    item.consume()
+                except Exception as e:
+                    logger.error('Failed to consume item: {}'.format(e))
+                    pass
 
             except Exception as e:
                 logger.exception(e)
