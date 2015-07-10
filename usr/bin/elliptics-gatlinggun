@@ -6,7 +6,7 @@ import sys
 import time
 
 from kazoo.client import KazooClient
-from mastermind.queue import LockingQueue
+from mastermind.utils.queue import LockingQueue
 import msgpack
 from opster import command
 import tornado
