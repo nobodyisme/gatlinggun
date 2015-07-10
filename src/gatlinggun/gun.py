@@ -14,9 +14,7 @@ from logger import logger
 
 class Gun(object):
 
-    READ_CHUNK_SIZE = 500 * 1024 * 1024  # 500 Mb
-    # write chunk size is set big enough in effort to write all required data
-    # in one elliptics.write_data call (should be set minding wait_timeout config setting)
+    READ_CHUNK_SIZE = 50 * 1024 * 1024
     WRITE_CHUNK_SIZE = 50 * 1024 * 1024
 
     WRITE_RETRY_NUM = 5
@@ -25,7 +23,8 @@ class Gun(object):
     DISTRUBUTE_TASK_ACTION = 'add'
     REMOVE_TASK_ACTION = 'remove'
 
-    def __init__(self, node, cache_path_prefix, tmp_dir):
+    def __init__(self, node, cache_path_prefix, tmp_dir,
+                 read_chunk_size=None, write_chunk_size=None):
         self.session = elliptics.Session(node)
         self.tmp_dir = tmp_dir
         if not os.path.exists(self.tmp_dir):
@@ -39,6 +38,9 @@ class Gun(object):
 
         self.cache_path_prefix = cache_path_prefix
         self.update_local_cache_groups()
+
+        self.read_chunk_size = int(read_chunk_size or self.READ_CHUNK_SIZE)
+        self.write_chunk_size = int(write_chunk_size or self.WRITE_CHUNK_SIZE)
 
         signal.signal(signal.SIGTERM, lambda signum, stack_frame: exit(1))
 
@@ -153,11 +155,11 @@ class Gun(object):
         session.ioflags |= elliptics.io_flags.nocsum
         last_exc = None
         with open(fname, 'wb') as f:
-            for i in xrange(int(math.ceil(float(size) / self.READ_CHUNK_SIZE))):
+            for i in xrange(int(math.ceil(float(size) / self.read_chunk_size))):
                 for retries in xrange(self.READ_RETRY_NUM):
                     try:
                         res = session.read_data(
-                            eid, i * self.READ_CHUNK_SIZE, self.READ_CHUNK_SIZE).get()
+                            eid, i * self.read_chunk_size, self.read_chunk_size).get()
                         chunk = res[0].data
                         break
                     except Exception as e:
@@ -166,7 +168,7 @@ class Gun(object):
                         pass
                 else:
                     err = 'Failed to read key %s: offset %s / total %s, last exc: %s' % (
-                        key, i * self.READ_CHUNK_SIZE, size, last_exc)
+                        key, i * self.read_chunk_size, size, last_exc)
                     raise ConnectionError(err)
                 f.write(chunk)
 
@@ -185,14 +187,14 @@ class Gun(object):
         last_exc = None
         with open(fname, 'rb') as f:
             session.write_prepare(eid, '', 0, size).get()
-            for i in xrange(int(math.ceil(float(size) / self.WRITE_CHUNK_SIZE))):
-                data = f.read(self.WRITE_CHUNK_SIZE)
+            for i in xrange(int(math.ceil(float(size) / self.write_chunk_size))):
+                data = f.read(self.write_chunk_size)
                 for retries in xrange(self.WRITE_RETRY_NUM):
                     try:
-                        offset = i * self.WRITE_CHUNK_SIZE
+                        offset = i * self.write_chunk_size
                         logger.debug('Writing key %s: offset %s, size %s, ' % (
                             key, offset, len(data)))
-                        res = session.write_plain(eid, data, offset).get()
+                        session.write_plain(eid, data, offset).get()
                         break
                     except Exception as e:
                         logger.info('Error while writing key %s, offset %s: '
