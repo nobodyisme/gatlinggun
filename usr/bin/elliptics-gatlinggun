@@ -113,24 +113,25 @@ def run(config, log_config):
         for task_queue in task_queues:
             try:
                 for item in task_queue:
-                    task = msgpack.unpackb(item.data)
+                    try:
+                        task = msgpack.unpackb(item.data)
 
-                    logger.info('Task %s fetched' % task['key'])
-                    logger.debug('Task %s: %s' % (task['key'], task))
-                    gun.process(task)
-                    logger.info('Task %s processed' % (task['key'],))
-                    item.consume()
+                        logger.info('Task %s fetched' % task['key'])
+                        logger.debug('Task %s: %s' % (task['key'], task))
+                        gun.process(task)
+                        logger.info('Task %s processed' % (task['key'],))
+                        item.consume()
 
-            except ConnectionError as e:
-                logger.exception(e)
+                    except ConnectionError as e:
+                        logger.exception(e)
 
-            except InvalidDataError as e:
-                logger.error(e)
-                try:
-                    item.consume()
-                except Exception as e:
-                    logger.error('Failed to consume item: {}'.format(e))
-                    pass
+                    except InvalidDataError as e:
+                        logger.error(e)
+                        try:
+                            item.consume()
+                        except Exception as e:
+                            logger.error('Failed to consume item: {}'.format(e))
+                            pass
 
             except Exception as e:
                 logger.exception(e)
