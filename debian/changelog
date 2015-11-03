@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.4.18) trusty; urgency=medium
+
+  * Fix misprint
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Tue, 03 Nov 2015 17:11:27 +0300
+
 elliptics-gatlinggun (0.4.17) trusty; urgency=medium
 
   * Fix keyword arg names
