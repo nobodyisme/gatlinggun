@@ -81,8 +81,8 @@ def run(config, log_config):
         node,
         config.get('elliptics', 'cache_path_prefix'),
         config.get('global', 'tmp_dir'),
-        read_size_chunk=config.get('elliptics', 'read_chunk_size'),
-        write_size_chunk=config.get('elliptics', 'write_chunk_size'))
+        read_chunk_size=config.get('elliptics', 'read_chunk_size'),
+        write_chunk_size=config.get('elliptics', 'write_chunk_size'))
     zk_addresses = config.get('zookeeper', 'addresses')
     logger.info('Connection to transport hosts %s' % zk_addresses)
     if isinstance(zk_addresses, unicode):
