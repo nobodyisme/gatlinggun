@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.4.16) trusty; urgency=medium
+
+  * Update task queues along with cache groups list
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Tue, 03 Nov 2015 11:17:32 +0300
+
 elliptics-gatlinggun (0.4.15) trusty; urgency=medium
 
   * Configurable read and write chunk sizes
