@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 from ConfigParser import ConfigParser
+import functools
 from multiprocessing import Process
 import os.path
 import sys
@@ -97,11 +98,10 @@ def run(config, log_config):
     #     config.get('zookeeper', 'task_path'),
     #     host=zk_addresses, timeout=3)
 
-    def update_local_cache_groups():
+    def update_local_cache_groups(task_queues):
         gun.update_local_cache_groups()
         group_ids = set()
 
-        global task_queues
         for group_id in gun.local_cache_groups:
             group_ids.add(group_id)
             task_queues.setdefault(
@@ -113,7 +113,7 @@ def run(config, log_config):
             del task_queues[lost_group_id]
 
     sync.PeriodThread(
-        update_local_cache_groups,
+        functools.partial(update_local_cache_groups, task_queues),
         config.getint('global', 'sync_keys_period')
         if config.has_option('global', 'sync_keys_period') else
         10
