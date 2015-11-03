@@ -134,7 +134,7 @@ def run(config, log_config):
 
         time.sleep(1)
 
-        for task_queue in task_queues:
+        for task_queue in task_queues.values():
             try:
                 for item in task_queue:
                     try:
