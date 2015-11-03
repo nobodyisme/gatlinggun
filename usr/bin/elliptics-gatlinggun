@@ -132,6 +132,8 @@ def run(config, log_config):
     while True:
         logger.info('Fetching task from queue')
 
+        time.sleep(1)
+
         for task_queue in task_queues:
             try:
                 for item in task_queue:
