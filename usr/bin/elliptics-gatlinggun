@@ -18,7 +18,7 @@ from gatlinggun.errors import ConnectionError, InvalidDataError
 from gatlinggun.gun import Gun
 from gatlinggun import helpers as h
 from gatlinggun.logger import logger, setup_logger
-from gatlinggun.mastermind_client import ReconnectableService
+# from gatlinggun.mastermind_client import ReconnectableService
 from gatlinggun import monitor
 from gatlinggun import sync
 
@@ -101,9 +101,10 @@ def run(config, log_config):
                       10
     ).start()
 
-    mastermind = ReconnectableService(
-        config.get('mastermind', 'app'),
-        config.get('mastermind', 'addresses'))
+    # mastermind = ReconnectableService(
+    #     config.get('mastermind', 'app'),
+    #     config.get('mastermind', 'addresses')
+    # )
     # synchronizer = sync.Synchronizer(node, group, transport, service)
     # pth = sync.PeriodThread(synchronizer.sync_keys,
     #                         config.getint('global', 'sync_keys_period')).start()
