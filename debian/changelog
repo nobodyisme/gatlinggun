@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.4.17) trusty; urgency=medium
+
+  * Fix keyword arg names
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Tue, 03 Nov 2015 16:34:42 +0300
+
 elliptics-gatlinggun (0.4.16) trusty; urgency=medium
 
   * Update task queues along with cache groups list
