@@ -15,7 +15,7 @@ from tornado import web
 
 from gatlinggun.config import JsonConfig
 from gatlinggun import daemon
-from gatlinggun.errors import ConnectionError, InvalidDataError
+from gatlinggun.errors import EllipticsError, InvalidDataError
 from gatlinggun.gun import Gun
 from gatlinggun import helpers as h
 from gatlinggun.logger import logger, setup_logger
@@ -129,36 +129,123 @@ def run(config, log_config):
 
     logger.info('Starting task processing')
 
+    task_attempts = {}
+
+    def consume_task(task):
+        try:
+            task.consume()
+        except Exception:
+            logger.exception(
+                'Failed to consume item, path {path}'.format(
+                    path=task.path
+                )
+            )
+            pass
+
     while True:
         logger.info('Fetching task from queue')
 
         time.sleep(1)
 
-        for task_queue in task_queues.values():
+        for cache_group, task_queue in task_queues.items():
             try:
                 for item in task_queue:
+
                     try:
                         task = msgpack.unpackb(item.data)
+                        if 'key' not in task:
+                            raise ValueError('Task does not have key set')
+                        if 'couple' not in task:
+                            raise ValueError('Task does not have couple set')
+                    except Exception:
+                        logger.exception(
+                            'Invalid data item, path {path}'.format(
+                                path=item.path,
+                            )
+                        )
+                        consume_task(item)
 
-                        logger.info('Task %s fetched' % task['key'])
-                        logger.debug('Task %s: %s' % (task['key'], task))
+                        continue
+
+                    key = task['key']
+
+                    if key in task_attempts:
+                        # check next attempt time
+                        next_attempt_time = task_attempts['next_attempt']
+                        seconds_left = next_attempt_time - time.time()
+                        if seconds_left > 0:
+                            logger.info(
+                                'Key {key} will be skipped, next attempt '
+                                'in {seconds} seconds'.format(
+                                    key=key,
+                                    seconds=seconds_left,
+                                )
+                            )
+                            continue
+
+                    try:
+
+                        logger.info(
+                            'Key {key}: task: {task}'.format(
+                                key=task['key'],
+                                task=task,
+                            )
+                        )
+
                         gun.process(task)
-                        logger.info('Task %s processed' % (task['key'],))
-                        item.consume()
 
-                    except ConnectionError as e:
-                        logger.exception(e)
+                        logger.info(
+                            'Key {key}: processing successfully finished'.format(
+                                key=task['key'],
+                            )
+                        )
+
+                    except EllipticsError as e:
+                        if e.elliptics_error_code in Gun.RETRIABLE_ELLIPTICS_ERRORS:
+                            task_record = task_attempts.setdefault(
+                                key,
+                                {
+                                    'attempts': 0,
+                                    'next_attempt': None,
+                                }
+                            )
+                            task_record['attempts'] += 1
+                            task_record['next_attempt'] = next_attempt_time(task_record)
+                            continue
+
+                        logger.error(
+                            'Key {key}: elliptics error is not retriable, '
+                            'task will be removed from queue'.format(
+                                key=key,
+                            )
+                        )
+                        # critical elliptics error on key distribution,
+                        # task cannot be processed,
+                        # task attemps history can be cleaned up
+                        task_attempts.pop(key, None)
+                        consume_task(item)
 
                     except InvalidDataError as e:
-                        logger.error(e)
-                        try:
-                            item.consume()
-                        except Exception as e:
-                            logger.error('Failed to consume item: {}'.format(e))
-                            pass
+                        logger.error(
+                            'Key {key}: task has invalid format ({error}) '
+                            'task will be removed from queue'.format(
+                                key=key,
+                                error=e,
+                            )
+                        )
+
+                        # key task has invalid structure, task cannot be processed,
+                        # task attemps history can be cleaned up
+                        task_attempts.pop(key, None)
+                        consume_task(item)
+                    else:
+                        # distributed key successfully, task attemps history can
+                        # be cleaned up
+                        task_attempts.pop(key, None)
+                        consume_task(item)
 
             except Exception as e:
-                logger.exception(e)
+                logger.exception('Unexpected error')
 
             finally:
                 time.sleep(1)

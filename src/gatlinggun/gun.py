@@ -7,7 +7,7 @@ import traceback
 
 import elliptics
 
-from gatlinggun.errors import ConnectionError, InvalidDataError
+from gatlinggun.errors import ConnectionError, InvalidDataError, EllipticsError
 from gatlinggun import helpers as h
 from logger import logger
 
@@ -17,14 +17,26 @@ class Gun(object):
     READ_CHUNK_SIZE = 50 * 1024 * 1024
     WRITE_CHUNK_SIZE = 50 * 1024 * 1024
 
-    WRITE_RETRY_NUM = 5
-    READ_RETRY_NUM = 3
+    WRITE_ATTEMPTS_NUM = 5
+    READ_ATTEMPTS_NUM = 3
 
     DISTRUBUTE_TASK_ACTION = 'add'
     REMOVE_TASK_ACTION = 'remove'
 
-    def __init__(self, node, cache_path_prefix, tmp_dir,
-                 read_chunk_size=None, write_chunk_size=None):
+    RETRIABLE_ELLIPTICS_ERRORS = (
+        -110,  # connection timeout
+        -104,  # connection reset by peer
+        -6,    # group is not in route list
+    )
+
+    def __init__(self,
+                 node,
+                 cache_path_prefix,
+                 tmp_dir,
+                 read_chunk_size=None,
+                 write_chunk_size=None,
+                 request_id_prefix=None):
+
         self.session = elliptics.Session(node)
         self.tmp_dir = tmp_dir
         if not os.path.exists(self.tmp_dir):
@@ -92,7 +104,7 @@ class Gun(object):
             return self.remove(task['key'].encode('utf-8'),
                                from_groups=[task['group']])
 
-        raise InvalidDataError('Unknow action: {0}'.format(task['action']))
+        raise InvalidDataError('Unknowm action: {0}'.format(task['action']))
 
     def distribute(self, key, from_groups=None, to_groups=None):
         if not from_groups or not to_groups:
@@ -104,13 +116,7 @@ class Gun(object):
 
         try:
             # fetch data from source group
-            try:
-                size, timestamp, user_flags = self.read(from_groups, key, fname)
-            except InvalidDataError:
-                raise
-            except Exception as e:
-                raise ConnectionError('Failed to read data for key %s, will be retried (%s)\n%s' % (
-                    key, e, traceback.format_exc()))
+            size, timestamp, user_flags = self.read(from_groups, key, fname)
 
             logger.info('Data read into tmp file: %s' % fname)
 
@@ -119,13 +125,7 @@ class Gun(object):
 
             for g in to_groups:
                 logger.info('Writing key %s to group %s' % (key, g))
-                try:
-                    self.write([g], key, fname, size, timestamp, user_flags)
-                except elliptics.Error:
-                    # Group is not available (No such device ot address: -6)
-                    raise
-                except Exception:
-                    raise ConnectionError('Failed to write data for key %s to group %s, will be retried' % (key, g))
+                self.write([g], key, fname, size, timestamp, user_flags)
         finally:
             try:
                 os.unlink(fname)
@@ -140,12 +140,21 @@ class Gun(object):
         session = self.session.clone()
         session.ioflags &= ~elliptics.io_flags.nocsum
         session.cflags |= elliptics.command_flags.nolock
+        session.set_exceptions_policy(elliptics.exceptions_policy.no_exceptions)
+        session.set_filter(elliptics.filters.all_final)
         logger.info('Groups: {0}'.format(groups))
         session.add_groups(groups)
+
         try:
-            lookup = session.read_data(eid, offset=0, size=1).get()[0]
-        except elliptics.NotFoundError:
-            raise InvalidDataError('Key "{0}" is not found on source groups'.format(key))
+            lookup = self.request(session.read_data(eid, offset=0, size=1))
+        except EllipticsError as e:
+            logger.error(
+                'Key {key_id}: lookup failed: {error}'.format(
+                    key_id=key,
+                    error=e,
+                )
+            )
+            raise
 
         size = lookup.total_size
         timestamp = lookup.timestamp
@@ -153,27 +162,55 @@ class Gun(object):
 
         session = session.clone()
         session.ioflags |= elliptics.io_flags.nocsum
-        last_exc = None
+
         with open(fname, 'wb') as f:
             for i in xrange(int(math.ceil(float(size) / self.read_chunk_size))):
-                for retries in xrange(self.READ_RETRY_NUM):
+
+                offset = i * self.read_chunk_size
+                read_attempts = 0
+
+                while True:
                     try:
-                        res = session.read_data(
-                            eid, i * self.read_chunk_size, self.read_chunk_size).get()
-                        chunk = res[0].data
-                        break
+                        read_attempts += 1
+                        result = self.request(
+                            session.read_data(
+                                eid,
+                                offset,
+                                self.read_chunk_size
+                            )
+                        )
+                        chunk = result.data
                     except Exception as e:
-                        last_exc = e
-                        logger.info('Error while reading key %s: type %s, msg: %s' % (key, type(e), e))
-                        pass
-                else:
-                    err = 'Failed to read key %s: offset %s / total %s, last exc: %s' % (
-                        key, i * self.read_chunk_size, size, last_exc)
-                    raise ConnectionError(err)
+                        logger.error(
+                            'Key {key_id}: error while reading, offset {offset}'.format(
+                                key_id=key,
+                                offset=offset,
+                            )
+                        )
+
+                        if read_attempts >= self.READ_ATTEMPTS_NUM:
+                            raise
+
+                        if isinstance(e, EllipticsError) and e.elliptics_error_code in (-110,):
+                            # retriable error
+                            continue
+
+                        raise
+
+                    else:
+                        break
+
                 f.write(chunk)
 
-        logger.info('Key {0} successfully read from groups {1} and written to '
-            'temp file {2}'.format(key, groups, fname))
+        logger.info(
+            'Key {key_id} successfully read from groups {groups} and written to '
+            'temp file {file}'.format(
+                key_id=key,
+                groups=groups,
+                file=fname
+            )
+        )
+
         return size, timestamp, user_flags
 
     def write(self, groups, key, fname, size, timestamp, user_flags):
@@ -183,31 +220,60 @@ class Gun(object):
         session.add_groups(groups)
         session.user_flags = user_flags
         session.timestamp = timestamp
+        session.set_exceptions_policy(elliptics.exceptions_policy.no_exceptions)
+        session.set_filter(elliptics.filters.all_final)
 
-        last_exc = None
         with open(fname, 'rb') as f:
-            session.write_prepare(eid, '', 0, size).get()
+            self.request(session.write_prepare(eid, '', 0, size))
             for i in xrange(int(math.ceil(float(size) / self.write_chunk_size))):
+
                 data = f.read(self.write_chunk_size)
-                for retries in xrange(self.WRITE_RETRY_NUM):
+
+                offset = i * self.write_chunk_size
+                write_attempts = 0
+
+                while True:
                     try:
-                        offset = i * self.write_chunk_size
                         logger.debug('Writing key %s: offset %s, size %s, ' % (
                             key, offset, len(data)))
-                        session.write_plain(eid, data, offset).get()
-                        break
+                        write_attempts += 1
+                        self.request(session.write_plain(eid, data, offset))
                     except Exception as e:
-                        logger.info('Error while writing key %s, offset %s: '
-                                    'type %s, msg: %s' % (
-                                        key, offset, type(e), e))
-                        pass
-                else:
-                    err = 'Failed to write key %s, len %s, last exc: %s' % (
-                        key, len(data), last_exc)
-                    raise ConnectionError(err)
-            session.write_commit(eid, '', 0, size).get()
+                        logger.error(
+                            'Key {key_id}: error while writing, offset {offset}'.format(
+                                key_id=key,
+                                offset=offset,
+                            )
+                        )
+
+                        if write_attempts >= self.WRITE_ATTEMPTS_NUM:
+                            raise
+
+                        if isinstance(e, EllipticsError) and e.elliptics_error_code in (-110,):
+                            # retriable error
+                            continue
+
+                        raise
+
+                    else:
+                        break
+
+            self.request(session.write_commit(eid, '', 0, size))
 
         logger.info('Key {0} successfully written to group {1}'.format(key, groups))
+
+    @staticmethod
+    def request(ell_request):
+        result_set = ell_request.get()
+        if len(result_set) != 1:
+            raise ValueError(
+                'Elliptics request result returned unexpected number '
+                'of result objects: {}'.format(len(result_set))
+            )
+        result = result_set[0]
+        if result.error.code:
+            raise EllipticsError(result.error.code)
+        return result
 
     def remove(self, key, from_groups=None):
 
