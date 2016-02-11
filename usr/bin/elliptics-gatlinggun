@@ -129,6 +129,7 @@ def run(config, log_config):
 
     logger.info('Starting task processing')
 
+    max_attempts = int(config.get('global', 'max_task_attempts'))
     task_attempts = {}
 
     def consume_task(task):
@@ -171,8 +172,8 @@ def run(config, log_config):
 
                     if key in task_attempts:
                         # check next attempt time
-                        next_attempt_time = task_attempts['next_attempt']
-                        seconds_left = next_attempt_time - time.time()
+                        next_attempt = task_attempts[key]['next_attempt']
+                        seconds_left = next_attempt - time.time()
                         if seconds_left > 0:
                             logger.info(
                                 'Key {key} will be skipped, next attempt '
@@ -210,8 +211,25 @@ def run(config, log_config):
                                 }
                             )
                             task_record['attempts'] += 1
-                            task_record['next_attempt'] = next_attempt_time(task_record)
-                            continue
+                            if task_record['attempts'] >= max_attempts:
+                                logger.info(
+                                    'Key {key}: max attempts limit reached, '
+                                    'removing from tasks'.format(
+                                        key=key,
+                                    )
+                                )
+                                task_attempts.pop(key, None)
+                                consume_task(item)
+                                continue
+                            else:
+                                task_record['next_attempt'] = next_attempt_time(task_record, config)
+                                logger.info(
+                                    'Key {key}: will be retried in {seconds} seconds'.format(
+                                        key=key,
+                                        seconds=task_record['next_attempt'] - int(time.time()),
+                                    )
+                                )
+                                continue
 
                         logger.error(
                             'Key {key}: elliptics error is not retriable, '
@@ -249,6 +267,18 @@ def run(config, log_config):
 
             finally:
                 time.sleep(1)
+
+
+def next_attempt_time(task_record, config):
+    attempts = task_record['attempts']
+
+    delay = int(config.get('global', 'task_delay'))
+    exp = int(config.get('global', 'task_delay_exp'))
+    max_delay = int(config.get('global', 'task_max_delay'))
+
+    next_delay = min(delay * (exp ** (attempts - 1)), max_delay)
+
+    return int(time.time()) + next_delay
 
 
 def monitor_app(config):
