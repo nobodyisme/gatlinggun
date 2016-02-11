@@ -1,6 +1,7 @@
 import math
 import os
 import os.path
+import random
 import socket
 import signal
 import traceback
@@ -54,6 +55,8 @@ class Gun(object):
         self.read_chunk_size = int(read_chunk_size or self.READ_CHUNK_SIZE)
         self.write_chunk_size = int(write_chunk_size or self.WRITE_CHUNK_SIZE)
 
+        self.request_id_prefix = request_id_prefix
+
         signal.signal(signal.SIGTERM, lambda signum, stack_frame: exit(1))
 
     @property
@@ -93,8 +96,30 @@ class Gun(object):
 
         self.__local_cache_groups = new_cache_groups
 
+    # request id is 8 bytes hex number
+    REQUEST_ID_BYTES_NUM = 8
+
+    def _reset_request_id(self):
+        if not self.request_id_prefix:
+            return
+
+        # generating random 8 bytes number, converting to string
+        request_id = hex(random.randint(0, 2 ** (self.REQUEST_ID_BYTES_NUM * 8)))
+
+        # removing '0x' prefix and possible 'L' postfix
+        request_id = request_id[len('0x'):].rstrip('L')
+
+        # filling with zeros up to 16 chars
+        request_id = request_id.zfill(self.REQUEST_ID_BYTES_NUM * 2)
+
+        # replacing first part with configurable request id prefix
+        request_id = self.request_id_prefix + request_id[len(self.request_id_prefix):]
+
+        self.session.trace_id = int(request_id, base=16)
+
     def process(self, task):
-        if not 'action' in task:
+        self._reset_request_id()
+        if 'action' not in task:
             raise InvalidDataError('No action is set for task')
         if task['action'] == self.DISTRUBUTE_TASK_ACTION:
             return self.distribute(task['key'].encode('utf-8'),
