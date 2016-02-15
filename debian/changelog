@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.4.21) trusty; urgency=medium
+
+  * Build debian rules updated for trusty
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Mon, 15 Feb 2016 16:45:19 +0300
+
 elliptics-gatlinggun (0.4.20) trusty; urgency=medium
 
   * Notify mastermind on tasks distribution status
