@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.4.22) trusty; urgency=medium
+
+  * Read chunks from group with best weight and positive answer
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Mon, 15 Feb 2016 20:17:22 +0300
+
 elliptics-gatlinggun (0.4.21) trusty; urgency=medium
 
   * Build debian rules updated for trusty
