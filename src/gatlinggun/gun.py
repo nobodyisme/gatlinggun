@@ -181,6 +181,10 @@ class Gun(object):
             )
             raise
 
+        # using only a single group that returned first positive result
+        # (and with best weight)
+        session.add_groups([lookup.group_id])
+
         size = lookup.total_size
         timestamp = lookup.timestamp
         user_flags = lookup.user_flags
