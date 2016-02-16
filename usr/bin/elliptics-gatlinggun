@@ -148,12 +148,16 @@ def run(config, log_config):
     def notify_mastermind(task, cache_group, success):
         if task['action'] == Gun.DISTRUBUTE_TASK_ACTION and success:
             task_status = 'upload_success'
+            handler = 'update_cache_key_upload_status'
         elif task['action'] == Gun.DISTRUBUTE_TASK_ACTION and not success:
             task_status = 'upload_failed'
+            handler = 'update_cache_key_upload_status'
         elif task['action'] == Gun.REMOVE_TASK_ACTION and success:
             task_status = 'removal_success'
+            handler = 'update_cache_key_removal_status'
         elif task['action'] == Gun.REMOVE_TASK_ACTION and not success:
             task_status = 'removal_failed'
+            handler = 'update_cache_key_removal_status'
         else:
             raise ValueError('Bad value for mastermind notification: {task}'.format(task=task))
 
@@ -164,7 +168,7 @@ def run(config, log_config):
             )
         )
         mastermind.enqueue(
-            'update_cache_key_status',
+            handler,
             msgpack.packb({
                 'id': task['key'],
                 'couple': task['couple'],
