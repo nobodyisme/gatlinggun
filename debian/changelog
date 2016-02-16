@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.4.23) trusty; urgency=medium
+
+  * Split mastermind notification handlers to separate removal and upload ones
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Tue, 16 Feb 2016 22:03:25 +0300
+
 elliptics-gatlinggun (0.4.22) trusty; urgency=medium
 
   * Read chunks from group with best weight and positive answer
