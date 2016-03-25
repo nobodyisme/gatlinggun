@@ -4,7 +4,6 @@ import threading
 
 import elliptics
 import msgpack
-from cocaine.services import Service
 
 from gun import Gun
 from logger import logger

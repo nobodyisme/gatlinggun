@@ -167,7 +167,7 @@ def run(config, log_config):
                 status=task_status,
             )
         )
-        mastermind.enqueue(
+        mastermind.run_sync(
             handler,
             msgpack.packb({
                 'id': task['key'],
@@ -175,7 +175,7 @@ def run(config, log_config):
                 'cache_group': cache_group,
                 'status': task_status,
             })
-        ).get()
+        )
 
     while True:
         logger.info('Fetching task from queue')
