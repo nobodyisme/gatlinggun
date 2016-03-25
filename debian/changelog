@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.4.25~cocainev12-1) trusty; urgency=medium
+
+  * Move to cocaine v12 API
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Fri, 25 Mar 2016 16:14:23 +0300
+
 elliptics-gatlinggun (0.4.25) trusty; urgency=medium
 
   * Stream data instead of caching it on disk
