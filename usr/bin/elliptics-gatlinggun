@@ -40,8 +40,7 @@ def main(config=('c', '', 'Application config file'),
     """This script starts gatling gun daemon that
     distributes keys to designated cache nodes"""
 
-    main_config = ConfigParser({'read_chunk_size': None,
-                                'write_chunK_size': None})
+    main_config = ConfigParser({'chunk_size': None})
 
     if not config:
         raise RuntimeError('Application config is required (-c|--config)')
@@ -81,9 +80,9 @@ def run(config, log_config):
     gun = Gun(
         node,
         config.get('elliptics', 'cache_path_prefix'),
-        config.get('global', 'tmp_dir'),
-        read_chunk_size=config.get('elliptics', 'read_chunk_size'),
-        write_chunk_size=config.get('elliptics', 'write_chunk_size'),
+        chunk_size=config.get('elliptics', 'chunk_size'),
+        attempts=int(config.get('elliptics', 'attempts')),
+        timeout=int(config.get('elliptics', 'wait_timeout')),
         request_id_prefix=config.get('elliptics', 'request_id_prefix'),
     )
     zk_addresses = config.get('zookeeper', 'addresses')
@@ -247,7 +246,7 @@ def run(config, log_config):
                             task_record['attempts'] += 1
                             if task_record['attempts'] >= max_attempts:
                                 logger.info(
-                                    'Key {key}: max attempts limit reached, '
+                                    'Key {key}: task max attempts limit reached, '
                                     'removing from tasks'.format(
                                         key=key,
                                     )
