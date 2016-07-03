@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.4.24) trusty; urgency=medium
+
+  * Stream data instead of caching it on disk
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Sun, 03 Jul 2016 16:35:48 +0300
+
 elliptics-gatlinggun (0.4.23) trusty; urgency=medium
 
   * Split mastermind notification handlers to separate removal and upload ones
