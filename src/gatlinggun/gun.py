@@ -1,9 +1,8 @@
-import math
-import os
-import os.path
+import functools
 import random
 import socket
 import signal
+import time
 import traceback
 
 import elliptics
@@ -15,8 +14,9 @@ from logger import logger
 
 class Gun(object):
 
-    READ_CHUNK_SIZE = 50 * 1024 * 1024
-    WRITE_CHUNK_SIZE = 50 * 1024 * 1024
+    CHUNK_SIZE = 50 * 1024 * 1024
+
+    TIMEOUT = 5  # 5 seconds
 
     WRITE_ATTEMPTS_NUM = 5
     READ_ATTEMPTS_NUM = 3
@@ -33,15 +33,12 @@ class Gun(object):
     def __init__(self,
                  node,
                  cache_path_prefix,
-                 tmp_dir,
-                 read_chunk_size=None,
-                 write_chunk_size=None,
+                 chunk_size=None,
+                 attempts=3,
+                 timeout=None,
                  request_id_prefix=None):
 
-        self.session = elliptics.Session(node)
-        self.tmp_dir = tmp_dir
-        if not os.path.exists(self.tmp_dir):
-            os.makedirs(self.tmp_dir)
+        self.session = elliptics.newapi.Session(node)
         try:
             self.hostname = socket.gethostname()
         except Exception as e:
@@ -52,8 +49,13 @@ class Gun(object):
         self.cache_path_prefix = cache_path_prefix
         self.update_local_cache_groups()
 
-        self.read_chunk_size = int(read_chunk_size or self.READ_CHUNK_SIZE)
-        self.write_chunk_size = int(write_chunk_size or self.WRITE_CHUNK_SIZE)
+        self.chunk_size = int(chunk_size or self.CHUNK_SIZE)
+        self.attempts = attempts
+        self.attempts_interval = 2
+        self.attempts_interval_exp = 2
+        self.max_attempts_interval = 60
+
+        self.timeout = timeout or self.TIMEOUT
 
         self.request_id_prefix = request_id_prefix
 
@@ -137,41 +139,161 @@ class Gun(object):
         logger.info('Distributing key {} to groups {} from '
                     'groups {}'.format(key, to_groups, from_groups))
 
-        fname = os.path.join(self.tmp_dir, key)
-
-        try:
-            # fetch data from source group
-            size, timestamp, user_flags = self.read(from_groups, key, fname)
-
-            logger.info('Data read into tmp file: %s' % fname)
-
-            # distribute data to destination nodes
-            logger.info('Distributing fetched data to groups %s' % to_groups)
-
-            for g in to_groups:
-                logger.info('Writing key %s to group %s' % (key, g))
-                self.write([g], key, fname, size, timestamp, user_flags)
-        finally:
-            try:
-                os.unlink(fname)
-            except OSError:
-                pass
+        self.copy_key(
+            key,
+            src_groups=from_groups,
+            dst_groups=to_groups,
+        )
 
         logger.info('Data was distibuted')
 
-    def read(self, groups, key, fname):
-        eid = elliptics.Id(key)
+    def copy_key(self, key, src_groups, dst_groups):
+        logger.info(
+            'Src groups {src_groups}, dst groups: {dst_groups}, '.format(
+                src_groups=src_groups,
+                dst_groups=dst_groups,
+            )
+        )
 
-        session = self.session.clone()
-        session.ioflags &= ~elliptics.io_flags.nocsum
-        session.cflags |= elliptics.command_flags.nolock
-        session.set_exceptions_policy(elliptics.exceptions_policy.no_exceptions)
-        session.set_filter(elliptics.filters.all_final)
-        logger.info('Groups: {0}'.format(groups))
-        session.add_groups(groups)
+        read_session = self.session.clone()
+        read_session.cflags |= elliptics.command_flags.nolock
+        read_session.set_exceptions_policy(elliptics.exceptions_policy.no_exceptions)
+        read_session.set_filter(elliptics.filters.all_final)
+        read_session.ioflags &= ~elliptics.io_flags.nocsum
+        read_session.timeout = self.timeout
+        read_session.groups = src_groups
+
+        write_session = self.session.clone()
+        write_session.set_exceptions_policy(elliptics.exceptions_policy.no_exceptions)
+        write_session.set_filter(elliptics.filters.all_final)
+        write_session.timeout = self.timeout
+        write_session.groups = dst_groups
+
+        lookup = self._src_lookup(key, session=read_session)
+        record_info = lookup.record_info
+
+        # using only a single group that returned first positive result
+        # (and with best weight)
+        read_session.groups = [lookup.group_id]
+
+        user_flags = self._src_user_flags(key, session=read_session)
+
+        write_session.json_timestamp = record_info.json_timestamp
+        write_session.timestamp = record_info.data_timestamp
+        write_session.user_flags = user_flags
+
+        self._write_prepare(
+            key,
+            record_info=record_info,
+            session=write_session,
+        )
 
         try:
-            lookup = self.request(session.read_data(eid, offset=0, size=1))
+            json_data = self._read_json(key, session=read_session)
+            self._write_json(key, json_data, record_info=record_info, session=write_session)
+
+            chunked_csum = record_info.record_flags & elliptics.record_flags.chunked_csum
+
+            offset = 0
+            while offset < record_info.data_size:
+                chunk = self._read_data_chunk(
+                    key,
+                    offset,
+                    self.chunk_size,
+                    chunked_csum=chunked_csum,
+                    record_info=record_info,
+                    session=read_session,
+                )
+                self._write_data_chunk(
+                    key,
+                    chunk,
+                    offset,
+                    session=write_session,
+                )
+                offset += len(chunk)
+
+            self._write_commit(key, record_info, session=write_session)
+        except Exception:
+            self._cleanup(key, session=write_session)
+            # TODO: log error
+            raise
+
+        logger.info(
+            'Key {key_id} successfully read from groups {src_groups} and written to '
+            'groups {dst_groups}'.format(
+                key_id=key,
+                src_groups=src_groups,
+                dst_groups=dst_groups,
+            )
+        )
+
+    def __retry(func):
+
+        @functools.wraps(func)
+        def wrapper(self, key, *args, **kwargs):
+            attempts = 0
+            interval = self.attempts_interval
+            while attempts < self.attempts:
+                attempts += 1
+                try:
+                    return func(self, key, *args, **kwargs)
+                except EllipticsError as e:
+                    if attempts == self.attempts:
+                        logger.error(
+                            'Key {key}: elliptics attempts limit reached, '
+                            '{attempts}/{max_attempts}, error: {error}'.format(
+                                key=key,
+                                attempts=attempts,
+                                max_attempts=self.attempts,
+                                error=e,
+                            )
+                        )
+                        raise
+                    if e.elliptics_error_code in Gun.RETRIABLE_ELLIPTICS_ERRORS:
+                        logger.error(
+                            'Key {key}: elliptics error, attempts '
+                            '{attempts}/{max_attempts}, will be retried, error: {error}'.format(
+                                key=key,
+                                attempts=attempts,
+                                max_attempts=self.attempts,
+                                error=e,
+                            )
+                        )
+                        time.sleep(interval)
+                        interval = min(
+                            interval * self.attempts_interval_exp,
+                            self.max_attempts_interval
+                        )
+                        continue
+                    logger.error(
+                        'Key {key}: elliptics error, attempts '
+                        '{attempts}/{max_attempts}, NOT retriable, error: {error}'.format(
+                            key=key,
+                            attempts=attempts,
+                            max_attempts=self.attempts,
+                            error=e,
+                        )
+                    )
+                    raise
+
+            raise AssertionError('Not expected to be here')
+
+        return wrapper
+
+    @__retry
+    def _src_lookup(self, key, session):
+        logger.info(
+            'Key {key_id}: performing lookup'.format(
+                key_id=key,
+            )
+        )
+
+        try:
+            res = self.any_request(
+                session.lookup(
+                    elliptics.Id(key)
+                )
+            )
         except EllipticsError as e:
             logger.error(
                 'Key {key_id}: lookup failed: {error}'.format(
@@ -181,124 +303,212 @@ class Gun(object):
             )
             raise
 
-        # using only a single group that returned first positive result
-        # (and with best weight)
-        session.add_groups([lookup.group_id])
+        return res
 
-        size = lookup.total_size
-        timestamp = lookup.timestamp
-        user_flags = lookup.user_flags
-
-        session = session.clone()
-        session.ioflags |= elliptics.io_flags.nocsum
-
-        with open(fname, 'wb') as f:
-            for i in xrange(int(math.ceil(float(size) / self.read_chunk_size))):
-
-                offset = i * self.read_chunk_size
-                read_attempts = 0
-
-                while True:
-                    try:
-                        read_attempts += 1
-                        result = self.request(
-                            session.read_data(
-                                eid,
-                                offset,
-                                self.read_chunk_size
-                            )
-                        )
-                        chunk = result.data
-                    except Exception as e:
-                        logger.error(
-                            'Key {key_id}: error while reading, offset {offset}'.format(
-                                key_id=key,
-                                offset=offset,
-                            )
-                        )
-
-                        if read_attempts >= self.READ_ATTEMPTS_NUM:
-                            raise
-
-                        if isinstance(e, EllipticsError) and e.elliptics_error_code in (-110,):
-                            # retriable error
-                            continue
-
-                        raise
-
-                    else:
-                        break
-
-                f.write(chunk)
-
+    @__retry
+    def _src_user_flags(self, key, session):
         logger.info(
-            'Key {key_id} successfully read from groups {groups} and written to '
-            'temp file {file}'.format(
+            'Key {key_id}: fetching user flags'.format(
                 key_id=key,
-                groups=groups,
-                file=fname
             )
         )
 
-        return size, timestamp, user_flags
+        try:
+            res = self.any_request(
+                session.read_data(
+                    elliptics.Id(key),
+                    offset=0,
+                    size=1,
+                )
+            )
+        except EllipticsError as e:
+            logger.error(
+                'Key {key_id}: fetching user flags failed: {error}'.format(
+                    key_id=key,
+                    error=e,
+                )
+            )
+            raise
 
-    def write(self, groups, key, fname, size, timestamp, user_flags):
-        eid = elliptics.Id(key)
+        return res.record_info.user_flags
 
-        session = self.session.clone()
-        session.add_groups(groups)
-        session.user_flags = user_flags
-        session.timestamp = timestamp
-        session.set_exceptions_policy(elliptics.exceptions_policy.no_exceptions)
-        session.set_filter(elliptics.filters.all_final)
+    @__retry
+    def _write_prepare(self, key, record_info, session):
+        try:
+            self.all_request(
+                session.write_prepare(
+                    elliptics.Id(key),
+                    json='',
+                    json_capacity=record_info.json_size,
+                    data='',
+                    data_offset=0,
+                    data_capacity=record_info.data_size,
+                )
+            )
+        except EllipticsError as e:
+            logger.error(
+                'Key {key_id}: write_prepare failed: {error}'.format(
+                    key_id=key,
+                    error=e,
+                )
+            )
+            raise
 
-        with open(fname, 'rb') as f:
-            self.request(session.write_prepare(eid, '', 0, size))
-            for i in xrange(int(math.ceil(float(size) / self.write_chunk_size))):
+    @__retry
+    def _read_json(self, key, session):
+        logger.info(
+            'Key {key_id}: reading json'.format(
+                key_id=key,
+            )
+        )
 
-                data = f.read(self.write_chunk_size)
+        try:
+            res = self.any_request(
+                session.read_json(elliptics.Id(key))
+            )
+        except EllipticsError as e:
+            logger.error(
+                'Key {key_id}: lookup failed: {error}'.format(
+                    key_id=key,
+                    error=e,
+                )
+            )
+            raise
 
-                offset = i * self.write_chunk_size
-                write_attempts = 0
+        return res.json
 
-                while True:
-                    try:
-                        logger.debug('Writing key %s: offset %s, size %s, ' % (
-                            key, offset, len(data)))
-                        write_attempts += 1
-                        self.request(session.write_plain(eid, data, offset))
-                    except Exception as e:
-                        logger.error(
-                            'Key {key_id}: error while writing, offset {offset}'.format(
-                                key_id=key,
-                                offset=offset,
-                            )
-                        )
+    @__retry
+    def _write_json(self, key, json_data, record_info, session):
+        logger.info(
+            'Key {key_id}: writing json'.format(
+                key_id=key,
+            )
+        )
 
-                        if write_attempts >= self.WRITE_ATTEMPTS_NUM:
-                            raise
+        try:
+            self.all_request(
+                session.write_plain(
+                    elliptics.Id(key),
+                    json=json_data,
+                    data='',
+                    data_offset=0,
+                )
+            )
+        except EllipticsError as e:
+            logger.error(
+                'Key {key_id}: writing json failed: {error}'.format(
+                    key_id=key,
+                    error=e,
+                )
+            )
+            raise
 
-                        if isinstance(e, EllipticsError) and e.elliptics_error_code in (-110,):
-                            # retriable error
-                            continue
+    @__retry
+    def _read_data_chunk(self, key, offset, size, chunked_csum, record_info, session):
+        logger.info(
+            'Key {key_id}: reading data chunk, offset {offset}, size {size}'.format(
+                key_id=key,
+                offset=offset,
+                size=size,
+            )
+        )
 
-                        raise
+        prev_timeout = session.timeout
+        prev_ioflags = session.ioflags
 
-                    else:
-                        break
+        if not chunked_csum:
+            if offset == 0:
+                # assumes that checksum calculation takes 1 seconds for each 5 Mb of data
+                session.timeout = (
+                    self.timeout +
+                    record_info.data_size / (5 * 1024 * 1024)
+                )
+            else:
+                # checksum is fully checked on first chunk reading, not required on next
+                # chunks reading
+                session.ioflags |= elliptics.io_flags.nocsum
+        try:
+            res = self.any_request(
+                session.read_data(
+                    elliptics.Id(key),
+                    offset=offset,
+                    size=size,
+                )
+            )
+        except EllipticsError as e:
+            logger.error(
+                'Key {key_id}: reading data chunk failed, offset {offset}: {error}'.format(
+                    key_id=key,
+                    offset=offset,
+                    error=e,
+                )
+            )
+            raise
+        finally:
+            session.timeout = prev_timeout
+            session.ioflags = prev_ioflags
 
-            self.request(session.write_commit(eid, '', 0, size))
+        return res.data
 
-        logger.info('Key {0} successfully written to group {1}'.format(key, groups))
+    @__retry
+    def _write_data_chunk(self, key, chunk, offset, session):
+        logger.info(
+            'Key {key_id}: writing data chunk, offset {offset}, size {size}'.format(
+                key_id=key,
+                offset=offset,
+                size=len(chunk),
+            )
+        )
+
+        try:
+            self.all_request(
+                session.write_plain(
+                    elliptics.Id(key),
+                    json='',
+                    data=chunk,
+                    data_offset=offset,
+                )
+            )
+        except EllipticsError as e:
+            logger.error(
+                'Key {key_id}: writing data chunk failed, offset {offset}: {error}'.format(
+                    key_id=key,
+                    offset=offset,
+                    error=e,
+                )
+            )
+            raise
+
+    @__retry
+    def _write_commit(self, key, record_info, session):
+        try:
+            self.all_request(
+                session.write_commit(
+                    elliptics.Id(key),
+                    json='',
+                    data='',
+                    data_offset=record_info.data_size,
+                    data_commit_size=record_info.data_size,
+                )
+            )
+        except EllipticsError as e:
+            logger.error(
+                'Key {key_id}: write commit failed: {error}'.format(
+                    key_id=key,
+                    error=e,
+                )
+            )
+            raise
+
+    @__retry
+    def _cleanup(self, key, session):
+        # TODO: remove?
+        # do nothing, leave uncommited key
+        pass
 
     @staticmethod
-    def request(ell_request):
+    def any_request(ell_request):
         result_set = ell_request.get()
-        positive_results = [
-            result
-            for result in result_set
-            if result.error.code == 0
-        ]
         all_results_desc = [
             'group {group}: {error_code}'.format(
                 group=result.group_id,
@@ -306,14 +516,14 @@ class Gun(object):
             )
             for result in result_set
         ]
-        if len(positive_results) > 1:
-            logger.error(
-                'Elliptics request result returned unexpected number '
-                'of positive result objects: {}'.format(len(positive_results))
-            )
-        logger.error(
+        logger.debug(
             'Request results: {}'.format(', '.join(all_results_desc))
         )
+        positive_results = [
+            result
+            for result in result_set
+            if result.error.code == 0
+        ]
         if not positive_results:
             for result in result_set:
                 if result.error.code in Gun.RETRIABLE_ELLIPTICS_ERRORS:
@@ -322,6 +532,34 @@ class Gun(object):
             raise EllipticsError(result_set[-1].error.code)
 
         return positive_results[0]
+
+    @staticmethod
+    def all_request(ell_request):
+        result_set = ell_request.get()
+        all_results_desc = [
+            'group {group}: {error_code}'.format(
+                group=result.group_id,
+                error_code=result.error.code
+            )
+            for result in result_set
+        ]
+        logger.debug(
+            'Request results: {}'.format(', '.join(all_results_desc))
+        )
+        retriable_errors = []
+        other_errors = []
+        for result in result_set:
+            if result.error.code in Gun.RETRIABLE_ELLIPTICS_ERRORS:
+                retriable_errors.append(result.error.code)
+            elif result.error.code:
+                other_errors.append(result.error.code)
+
+        if other_errors:
+            raise EllipticsError(other_errors[0])
+        if retriable_errors:
+            raise EllipticsError(retriable_errors[0])
+
+        return result_set[0]
 
     def remove(self, key, from_groups=None):
 
