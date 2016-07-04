@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.4.25) trusty; urgency=medium
+
+  * Stream data instead of caching it on disk
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Mon, 04 Jul 2016 11:40:01 +0300
+
 elliptics-gatlinggun (0.4.24) trusty; urgency=medium
 
   * Stream data instead of caching it on disk
