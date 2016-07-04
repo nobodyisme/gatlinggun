@@ -427,6 +427,7 @@ class Gun(object):
                 # checksum is fully checked on first chunk reading, not required on next
                 # chunks reading
                 session.ioflags |= elliptics.io_flags.nocsum
+
         try:
             res = self.any_request(
                 session.read_data(
@@ -487,7 +488,7 @@ class Gun(object):
                     elliptics.Id(key),
                     json='',
                     data='',
-                    data_offset=record_info.data_size,
+                    data_offset=0,
                     data_commit_size=record_info.data_size,
                 )
             )
