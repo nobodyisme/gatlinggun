@@ -14,7 +14,7 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  python-kazoo,
- cocaine-v12-framework-python,
+ cocaine-framework-python,
  python-mastermind,
 XB-Python-Version: >= 2.6
 Description: Keys dispatcher python library for elliptics storage
@@ -26,7 +26,7 @@ Depends:
  ${misc:Depends},
  elliptics-gatlinggun,
  python-opster,
- cocaine-v12-framework-python,
+ cocaine-framework-python,
  python-msgpack | msgpack-python,
 XB-Python-Version: >= 2.6
 Description: Keys dispatcher executable for elliptics storage
