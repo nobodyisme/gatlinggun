@@ -16,6 +16,18 @@ elliptics-gatlinggun (0.4.24) trusty; urgency=medium
 
  -- Andrey Vasilenkov <indigo@yandex-team.ru>  Sun, 03 Jul 2016 16:35:48 +0300
 
+elliptics-gatlinggun (0.4.23~cocainev12-2) trusty; urgency=medium
+
+  * Rename cocaine v12 package dependencies
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Thu, 06 Apr 2017 19:34:14 +0300
+
+elliptics-gatlinggun (0.4.23~cocainev12-1) trusty; urgency=medium
+
+  * Move to cocaine v12 API
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Fri, 25 Mar 2016 16:14:23 +0300
+
 elliptics-gatlinggun (0.4.23) trusty; urgency=medium
 
   * Split mastermind notification handlers to separate removal and upload ones
