@@ -1,3 +1,9 @@
+elliptics-gatlinggun (0.4.26) trusty; urgency=medium
+
+  * Update dependencies for cocaine v13
+
+ -- Andrey Vasilenkov <indigo@yandex-team.ru>  Mon, 17 Apr 2017 15:45:00 +0300
+
 elliptics-gatlinggun (0.4.25~cocainev12-1) trusty; urgency=medium
 
   * Move to cocaine v12 API
